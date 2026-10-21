@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. Manual login needs a graphical browser.
 metadata:
   author: cnatom
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Wangda real playback
@@ -47,7 +47,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 5. On `waiting_login`, tell the user to authenticate manually, then explicitly `resume`. Do not auto-retry login or open extra windows.
 6. On `paused` or `stopped`, do not resume without the user's intent. On `interrupted`, explain that the runner died; an explicit `resume` rechecks the platform and skips completed queue entries.
 7. On `unconfirmed`, report it as unconfirmed. Do not convert it to success, repeatedly replay the task, or click unsupported required item types.
-8. Only report completion when `status == "completed"` and every queue entry is completed with a verified result. Browser exit code, elapsed time, video end, and local section changes alone are not enough.
+8. Only report completion when `status == "completed"` and every queue entry is completed with a verified result. Newly evaluated direct courses require both a full course directory/counter and their exact subject card marked completed (`confirmation: "course_and_subject"`). An increase in total completed items could belong to another course and is not proof. Browser exit code, elapsed time, video end, and local section changes alone are not enough.
 9. Completion/pause/stop automatically closes owned automation processes and retains the dedicated login profile. `login` intentionally leaves its window open; use `stop` to close it without deleting login state.
 
 ## Boundaries and pitfalls
@@ -56,6 +56,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - Rates are restricted to 1.0, 1.2, and 1.5; availability still depends on platform/account rules.
 - Only video (type 10) and normal URL-item UI clicks (type 3) are supported. Unknown required types need manual review.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
+- Course and subject progress can disagree temporarily. The CLI refreshes card state within the configured confirmation window; expiry means `unconfirmed`, not permission to replay indefinitely or manufacture a result.
 - Login needs a visible browser/display. A remote headless-only host must use a secure graphical session for authentication; do not export cookies into chat.
 - Logs and profiles are private local data. Do not upload them or paste raw page/network state into issues.
 

@@ -76,6 +76,32 @@ def inspect(browser, config, url):
         browser.close()
 
 
+def confirm_subject(page, config, url, course_ids=None):
+    """Confirm exact cards, not just a course counter or an aggregate increase."""
+    page.js(engine.STOP_PLAYBACK)
+    deadline = time.monotonic() + config.confirmation_seconds
+    first_read = True
+    while True:
+        if not first_read:
+            # Assigning the same SPA hash does not refresh server-backed card state.
+            page.call('Page.reload', ignoreCache=True)
+        data = read_subject(page, url)
+        first_read = False
+        engine.log(None, ev='subject', **data)
+        if course_ids is None:
+            pending = engine.required_items(data['items'])
+        else:
+            statuses = {item['id']: item['st'] for item in data['items']}
+            pending = [cid for cid in course_ids if statuses.get(cid) != '已完成']
+        if not pending:
+            return data
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise Unconfirmed('Requested items remain unconfirmed on the subject page')
+        engine.log(None, ev='confirm_wait')
+        time.sleep(min(10, config.poll_seconds * 10, remaining))
+
+
 def play(browser, config, url):
     validate_url(url)
     page = None
@@ -87,7 +113,10 @@ def play(browser, config, url):
                 if engine.is_login_wall(page):
                     raise LoginRequired()
                 raise Unconfirmed('Course directory/counter did not confirm completion')
-            return {'verified': True, 'course': course}
+            subject_url = f'{engine.HOST}/#/study/subject/detail/{subject}'
+            confirm_subject(page, config, subject_url, course_ids=(course,))
+            return {'verified': True, 'course': course, 'subject': subject,
+                    'confirmation': 'course_and_subject', 'card_status': '已完成'}
         data = read_subject(page, url)
         engine.log(None, ev='subject', **data)
         pending = engine.required_items(data['items'])
@@ -104,16 +133,8 @@ def play(browser, config, url):
                 engine.click_item(page, item['id'], None)
             else:
                 raise UnsupportedItem('Unsupported required item type: manual review needed')
-        deadline = time.monotonic() + config.confirmation_seconds
-        while True:
-            data = read_subject(page, url)
-            engine.log(None, ev='subject', **data)
-            if not engine.required_items(data['items']):
-                return {'verified': True, 'subject': subject, 'progress': data['progress'], 'items': data['items']}
-            if time.monotonic() >= deadline:
-                raise Unconfirmed('Required items remain unconfirmed on the platform')
-            engine.log(None, ev='confirm_wait')
-            time.sleep(min(10, config.poll_seconds * 10))
+        data = confirm_subject(page, config, url)
+        return {'verified': True, 'subject': subject, 'progress': data['progress'], 'items': data['items']}
     finally:
         if page is not None:
             try:

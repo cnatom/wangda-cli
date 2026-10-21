@@ -10,6 +10,14 @@ from .browser import Page
 from .state import scrub
 
 HOST = "https://wangda.chinamobile.com"
+STOP_PLAYBACK = r"""
+(() => {
+  const worker = window.__wk;
+  if (worker && worker.iv) { clearInterval(worker.iv); worker.iv = null; }
+  const video = document.querySelector('video');
+  if (video) video.pause();
+})()
+"""
 BROWSER = None
 EVENT_SINK = None
 

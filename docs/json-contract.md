@@ -15,6 +15,8 @@ Every command result includes `schema_version: 1` and `status`. New optional fie
 - `last_event`: last sanitized event. Its t is Unix seconds.
 - `config`: resolved non-secret execution settings, retained for resume.
 
+From package 0.1.1, a newly evaluated direct-course result additionally includes `confirmation: "course_and_subject"` and `card_status: "已完成"`. Both the course directory/counter and that exact subject card must confirm. Pending or missing cards produce `unconfirmed` (exit 4) after the confirmation window; another card completing does not satisfy it. These fields are additive within schema version 1; old saved results retain their original evidence and are not retroactively rewritten.
+
 A missing snapshot yields idle plus an empty queue. `interrupted` is derived when a saved running owner no longer exists with the same creation time; the status command never writes a repair. A fresh supervisor heartbeat is distinct from advancing video time.
 
 ## Other command statuses

@@ -163,6 +163,16 @@ class NodeCourseStateTests(unittest.TestCase):
         self.assertEqual(d.js("document.querySelector('video').playbackRate"), 1.5)
         self.assertEqual(d.js("window.__wk.rate"), 1.5)
 
+    def test_stop_playback_clears_own_timer_before_pausing_the_video(self):
+        d = self.dom
+        d.set(href=course_href(NEW_ID), sections=[sec("学习中", True)], body=prog(0, 1), video=VIDEO)
+        d.js("document.querySelector('video').pause = function () { this.paused = true; }")
+        d.js(worker(1.5))
+        d.js(wanda.STOP_PLAYBACK)
+        d.advance(10000)
+        self.assertEqual(d.live_timers(), 0)
+        self.assertTrue(d.js("document.querySelector('video').paused"))
+
 
 class ReloadCooldownTests(unittest.TestCase):
     def test_cooldown_blocks_repeat_reloads(self):

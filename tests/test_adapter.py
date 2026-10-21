@@ -68,3 +68,35 @@ def test_topic_requires_final_platform_confirmation(tmp_path):
     with patch('wangda.adapter.read_subject', side_effect=[pending, completed]), \
          patch.object(engine, 'run_course', return_value=True):
         assert play(browser, load_config(data_dir=tmp_path, env={}), SUBJECT)['verified'] is True
+
+
+@pytest.mark.parametrize('target_present', [True, False])
+def test_direct_course_does_not_complete_when_only_a_different_card_is_completed(tmp_path, target_present):
+    browser, _ = setup_browser()
+    items = [{'id': 'different-course', 'type': '10', 'st': '已完成'}]
+    if target_present:
+        items.append({'id': 'demo-course', 'type': '10', 'st': '未开始'})
+    cards = {'progress': '', 'items': items}
+    config = load_config(data_dir=tmp_path, confirmation_seconds=0.01, poll_seconds=0.001, env={})
+    with patch.object(engine, 'run_course', return_value=True) as playback, \
+         patch('wangda.adapter.read_subject', return_value=cards), \
+         patch.object(engine, 'log'), patch('wangda.adapter.time.sleep'):
+        with pytest.raises(Unconfirmed):
+            play(browser, config, COURSE)
+    playback.assert_called_once()
+
+
+def test_delayed_exact_card_confirmation_reloads_without_replaying_course(tmp_path):
+    browser, page = setup_browser()
+    pending = {'progress': '', 'items': [{'id': 'demo-course', 'type': '10', 'st': '未开始'}]}
+    completed = {'progress': '', 'items': [{'id': 'demo-course', 'type': '10', 'st': '已完成'}]}
+    with patch.object(engine, 'run_course', return_value=True) as playback, \
+         patch('wangda.adapter.read_subject', side_effect=[pending, completed]) as subject_read, \
+         patch.object(engine, 'log'), patch('wangda.adapter.time.sleep'):
+        result = play(browser, load_config(data_dir=tmp_path, env={}), COURSE)
+    assert result['confirmation'] == 'course_and_subject'
+    assert result['card_status'] == '已完成'
+    assert subject_read.call_count == 2
+    page.call.assert_any_call('Page.reload', ignoreCache=True)
+    page.js.assert_any_call(engine.STOP_PLAYBACK)
+    playback.assert_called_once()

@@ -22,7 +22,7 @@ It creates an isolated temporary profile, checks CDP, visible headless DOM and c
 
 ## Authenticated platform acceptance
 
-This standalone release has not yet completed an authenticated end-to-end course on every platform. The migrated core has prior personal-use experience on macOS, but that is not proof of the new package's authenticated behavior. Before unattended use:
+Authenticated video-course acceptance passed on macOS 27.0 / Chrome 155 on October 21, 2026. See [the acceptance report](acceptance-2026-10-21.md) for observed evidence, the exact-card confirmation correction, and untested cases. This does not establish authenticated playback on every platform or every item type. Before unattended use in another environment:
 
 1. Use an authorized account and a new dedicated profile; complete login manually.
 2. Inspect a short permitted course/subject and compare the visible required-item list.
