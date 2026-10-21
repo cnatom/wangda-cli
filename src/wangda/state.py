@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import time
 
 from filelock import FileLock
 
@@ -25,6 +26,17 @@ def scrub(value):
     return value
 
 
+def retry_sharing_violation(operation):
+    """Windows readers/AV can briefly deny access or replacement; never retry forever."""
+    for attempt in range(20):
+        try:
+            return operation()
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(min(0.05, 0.002 * 2 ** attempt))
+
+
 def atomic_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -35,14 +47,14 @@ def atomic_json(path, value):
             handle.write('\n')
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(name, path)
+        retry_sharing_violation(lambda: os.replace(name, path))
     finally:
         Path(name).unlink(missing_ok=True)
 
 
 def read_json(path, default=None):
     try:
-        return json.loads(Path(path).read_text(encoding='utf-8'))
+        return json.loads(retry_sharing_violation(lambda: Path(path).read_text(encoding='utf-8')))
     except FileNotFoundError:
         return default
 

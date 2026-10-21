@@ -67,3 +67,26 @@ def test_skill_path_points_to_portable_skill(capsys):
     content = Path(result['path']).read_text(encoding='utf-8')
     assert content.startswith('---\nname: wangda\n')
     assert '.hermes/' not in content
+
+
+def test_pause_ack_waits_until_runner_releases_its_locks(tmp_path):
+    from contextlib import contextmanager
+    from filelock import Timeout
+    from wangda.cli import control
+    from wangda.config import load_config
+    calls = []
+    states = iter([{'status': 'running', 'run_id': 'test'}, {'status': 'paused'}])
+    last = [{'status': 'paused'}]
+    def current(_):
+        last[0] = next(states, last[0])
+        return last[0]
+    @contextmanager
+    def cleanup_lock(_):
+        calls.append(1)
+        if len(calls) == 1:
+            raise Timeout('runner is still releasing resources')
+        yield
+    with patch('wangda.cli.snapshot', side_effect=current), patch('wangda.cli.exclusive', cleanup_lock), \
+         patch('time.sleep'):
+        assert control(load_config(data_dir=tmp_path, env={}), 'pause', 1)['status'] == 'paused'
+    assert len(calls) == 2

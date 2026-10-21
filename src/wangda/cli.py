@@ -120,7 +120,12 @@ def control(config, action, timeout):
     while time.monotonic() < deadline:
         state = snapshot(store)
         if state['status'] != 'running':
-            return state
+            try:
+                # The final snapshot can be visible just before the runner's finally releases locks.
+                with exclusive(config):
+                    return state
+            except Timeout:
+                pass
         time.sleep(0.1)
     raise RuntimeError('Control was requested but not yet acknowledged; inspect status before retrying')
 

@@ -2,7 +2,7 @@
 
 ## 状态
 
-已实现，本地验证完成。GitHub public 发布与远端 CI 待核验。
+已实现并发布到 GitHub public 仓库 `cnatom/wangda-cli`。本地验证完成，远端 CI 正在核验。
 
 ## 范围与文件
 
@@ -14,13 +14,15 @@
 
 ## 本地验证
 
-- `uv run pytest -q`：57 passed, 1 skipped（浏览器测试默认不自动启动）。
+- `uv run pytest -q`：61 passed, 1 skipped（浏览器测试默认不自动启动）。
 - 单独启用离线真实 Chrome 测试：1 passed；使用全新临时 profile，无账号、无平台访问，结束后无该 profile 的浏览器残留。
 - Ruff：通过。
 - sdist / wheel 构建及 Twine metadata 检查：通过。将元数据版本固定 2.4，避免当前构建器默认 2.5 与 Twine 6 的兼容问题。
 - 独立 wheel-only 环境安装：版本、status 和随包 Skill 定位通过。
 - detect-secrets：唯一初始命中是拒绝凭据 URL 的合成测试样例，已明确标记测试白名单；不含真实凭据。
 - 新增有界停滞恢复、CDP 重连引用保持、PID 创建时间校验，避免无限重载及误杀复用 PID。
+- GitHub 首轮 CI：macOS/Linux 四组通过；Windows 两组发现快照替换期间的共享权限冲突，已补齐读/替换的有限退避重试与暂停确认等待锁释放的回归测试，待远端复验。
+- GitHub 直接源码安装：版本与随包 Skill 定位通过。公开内容已读回核验。
 
 ## 未验证项
 

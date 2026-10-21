@@ -43,3 +43,36 @@ def test_control_is_bound_to_a_specific_run(tmp_path):
     assert store.command('two') is None
     assert store.command('one') == 'pause'
     assert json.loads((tmp_path / 'control.json').read_text())['run_id'] == 'one'
+
+
+def test_snapshot_read_retries_transient_windows_sharing_violation(tmp_path):
+    from pathlib import Path
+    from unittest.mock import patch
+    with patch.object(Path, 'read_text', side_effect=[PermissionError('sharing violation'), '{"status":"paused"}']):
+        assert Store(tmp_path).read()['status'] == 'paused'
+
+
+def test_snapshot_replace_retries_without_losing_new_state(tmp_path):
+    import os
+    from unittest.mock import patch
+    original = os.replace
+    calls = []
+    def sharing_violation(source, destination):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError('sharing violation')
+        return original(source, destination)
+    with patch('wangda.state.os.replace', side_effect=sharing_violation):
+        Store(tmp_path).write({'status': 'paused'})
+    assert Store(tmp_path).read()['status'] == 'paused'
+    assert len(calls) == 3
+
+
+def test_permanent_permission_error_is_not_hidden_or_retried_forever(tmp_path):
+    from pathlib import Path
+    from unittest.mock import patch
+    with patch.object(Path, 'read_text', side_effect=PermissionError('denied')) as read, \
+         patch('time.sleep'):
+        with pytest.raises(PermissionError):
+            Store(tmp_path).read()
+        assert read.call_count <= 20
