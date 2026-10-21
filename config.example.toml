@@ -1,0 +1,13 @@
+# Copy to your preferred config location; pass --config /path/to/config.toml.
+# Or set WANDA_CONFIG. CLI overrides environment, which overrides this file.
+[wangda]
+rate = 1.5
+headed = false
+port = 0                # 0: Chrome chooses a free loopback CDP port
+retries = 2             # task retries after process/network failure (not login/unconfirmed)
+stale_seconds = 180
+confirmation_seconds = 180
+poll_seconds = 1
+# data_dir = "./.runtime"  # Relative paths resolve against the command's working directory
+# profile = "./.runtime/profile"  # Dedicated profile ONLY; never your everyday Chrome data
+# browser = "/path/to/chrome"

@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check Node for synthetic DOM tests
+        run: node --version
+      - name: Install
+        run: python -m pip install ".[dev]"
+      - name: Lint
+        run: python -m ruff check src tests
+      - name: Test
+        run: python -m pytest -q
+      - name: Build distributions
+        run: python -m build
+      - name: Validate distribution metadata
+        run: python -m twine check dist/*
+      - name: Verify wheel-only install and bundled skill
+        shell: bash
+        run: |
+          python -m venv wheel-smoke
+          if [ -f wheel-smoke/Scripts/python.exe ]; then
+            PY=wheel-smoke/Scripts/python.exe
+          else
+            PY=wheel-smoke/bin/python
+          fi
+          "$PY" -m pip install dist/*.whl
+          "$PY" -m wangda --version
+          "$PY" -m wangda status --json
+          "$PY" -m wangda skill-path --json

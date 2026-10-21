@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wangda-cli"
+version = "0.1.0"
+description = "Agent-neutral real-playback CLI for China Mobile Wangda"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "cnatom"}]
+dependencies = ["websocket-client>=1.8,<2", "platformdirs>=4,<5", "psutil>=6,<8", "filelock>=3.16,<4"]
+
+[project.urls]
+Repository = "https://github.com/cnatom/wangda-cli"
+Issues = "https://github.com/cnatom/wangda-cli/issues"
+
+[project.scripts]
+wanda = "wangda.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1", "build>=1,<2", "twine>=6,<7"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wangda"]
+core-metadata-version = "2.4"
+
+[tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
+
+[tool.hatch.build.targets.wheel.force-include]
+"skills/wangda" = "wangda/skill"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
