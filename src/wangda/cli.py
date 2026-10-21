@@ -183,8 +183,7 @@ def main(argv=None):
                 if not saved.get('queue'):
                     raise ValueError('No saved queue to resume')
                 if saved.get('config'):
-                    previous = {**saved['config'], **{key: value for key, value in overrides.items() if value is not None}}
-                    config = load_config(env={}, **previous)
+                    config = load_config(config_file=values.get('config'), base=saved['config'], **overrides)
             if args.background:
                 state = start_background(config, urls, resume)
                 emit(state)

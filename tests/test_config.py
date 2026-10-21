@@ -32,3 +32,10 @@ def test_defaults_have_no_agent_paths():
     assert config.data_dir.is_absolute()
     assert ".hermes" not in str(config.data_dir)
     assert isinstance(config.profile, Path)
+
+
+def test_resume_baseline_keeps_settings_but_explicit_sources_override_them(tmp_path):
+    config = load_config(base={'rate': 1.0, 'port': 9339}, data_dir=tmp_path,
+                         env={'WANDA_RATE': '1.2'})
+    assert config.rate == 1.2
+    assert config.port == 9339

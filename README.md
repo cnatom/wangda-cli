@@ -79,6 +79,8 @@ wanda skill-path --json
 
 优先级：CLI > `WANDA_*` 环境变量 > TOML > 默认值。示例见 [config.example.toml](config.example.toml)。全局参数可以放在子命令前后。
 
+`resume` 以此前保存的执行配置为基线，当前显式 CLI、环境变量和 TOML 设置仍优先于该基线。
+
 ```sh
 wanda --config ./config.toml doctor
 wanda run '<链接>' --data-dir ./.runtime --background

@@ -25,16 +25,16 @@ class Config:
         return {k: str(v) if isinstance(v, Path) else v for k, v in asdict(self).items()}
 
 
-def load_config(config_file=None, env=None, **overrides):
+def load_config(config_file=None, env=None, base=None, **overrides):
     env = os.environ if env is None else env
     path = Path(config_file or env.get('WANDA_CONFIG') or user_config_path('wangda-cli', appauthor=False) / 'config.toml')
-    values = {}
+    values = dict(base or {})
     if path.exists():
         with path.open('rb') as handle:
             doc = tomllib.load(handle)
         if set(doc) - {'wangda'} or not isinstance(doc.get('wangda', {}), dict):
             raise ValueError('Configuration must contain only a [wangda] table')
-        values = doc.get('wangda', {})
+        values.update(doc.get('wangda', {}))
     elif config_file or env.get('WANDA_CONFIG'):
         raise ValueError('Configuration file does not exist')
     fields = set(Config.__dataclass_fields__)
