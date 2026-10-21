@@ -45,7 +45,7 @@
 
 ## 自动化验证
 
-本地测试：66 passed，1 skipped；跳过项是默认不启动浏览器的可选离线测试。单独启用真实无头 Chrome 的离线测试：1 passed。Ruff 通过。跨系统 CI 的结果以对应代码提交的 GitHub Actions 为准，不能替代真实登录环境验收。
+本地测试：66 passed，1 skipped；跳过项是默认不启动浏览器的可选离线测试。单独启用真实无头 Chrome 的离线测试：1 passed。Ruff 通过。0.1.1 代码提交 `f71c623` 的 GitHub Actions 运行 `39595106466`，macOS/Linux/Windows 与 Python 3.11/3.14 的六组均为 66 passed、1 skipped。公开 Git 安装的该提交也已再次完成真实账号的双重确认检查。跨系统 CI 不能替代真实登录环境验收。
 
 ## 未覆盖范围
 
