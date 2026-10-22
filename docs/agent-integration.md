@@ -1,16 +1,20 @@
 # Agent integration
 
-The CLI is the compatibility layer. Any agent that can execute local commands and read JSON can use it, even without native Agent Skills support. A chat-only agent cannot run a browser by itself. No claim is made that every product has been tested.
+The wangda skill manages local playback through the `wanda` CLI. It requires local shell access and a graphical browser for manual login.
 
 ## Install the skill
 
-Run `wanda skill-path --json` to locate the bundled SKILL.md. Copy its containing `wangda` directory into your agent's documented skill directory, or load that file explicitly. In a checkout the source is `skills/wangda/SKILL.md`. Follow your agent's own install/reload instructions; this project does not hard-code a particular framework's private paths.
+```sh
+npx skills add cnatom/wangda-cli --skill wangda
+```
+
+Follow the installer's prompts to select the target agent and installation scope. The skill source is `skills/wangda/SKILL.md`.
 
 The skill follows the public Agent Skills format: https://agentskills.io/specification . It uses standard name/description/license/compatibility and string-valued metadata, without product-specific tool allowlists or custom runtime metadata.
 
-## Without skill support
+## First use
 
-Ask the agent to read SKILL.md and use `wanda` through its shell tool. The full task runner is already implemented in Python; the model must not rewrite it, add cron guards, or inject its own playback script.
+The skill checks the runtime and installs the CLI from this repository using uv when needed. Missing system prerequisites are reported to the user rather than installed silently. See [usage and configuration](usage.md). The agent must not rewrite the task runner, add cron guards, or inject another playback script.
 
 `run --background` returns after the detached supervisor acknowledges ownership. Subsequent `status --json` reads the saved state without touching the website. Wait for an explicit terminal status before reporting completion. Do not run `inspect` during playback; the locks reject it rather than interrupting the course.
 

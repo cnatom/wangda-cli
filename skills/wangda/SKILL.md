@@ -10,18 +10,25 @@ metadata:
 
 # Wangda real playback
 
-Use this skill when the user gives China Mobile Wangda course/subject links and asks to play, queue, resume, or check progress. This is a local CLI, not a hosted service. It works without a particular agent framework. Do not use it for other learning platforms, examinations, or generating completion records.
+Use this skill when the user gives China Mobile Wangda course/subject links and asks to play, queue, resume, or check progress. Do not use it for other learning platforms, examinations, or generating completion records.
 
 ## Prerequisites
 
-1. Confirm `wanda --version` and `wanda doctor --json` work. If missing, ask the user to install `wangda-cli` from the project's documented Git URL or a trusted checkout; do not install unreviewed lookalike packages.
+1. Check and initialize the runtime using the first-use instructions below. Do not launch a learning queue until environment checks pass.
 2. Use only the user's authorized account and comply with the platform and employer's learning rules. Playback does not establish comprehension or satisfy obligations to attend personally.
 3. Ask the user to run `wanda login` and complete authentication in the dedicated window when needed. Never ask for, type, read, or log their password, phone/SMS code, cookies, or tokens.
 4. Preserve the same configuration/data directory for every command in one task. Never use the user's normal browser profile.
 
+## First-use setup
+
+- Check `wanda --version`. If missing, check for uv, Git and Python 3.11+, then run `uv tool install 'git+https://github.com/cnatom/wangda-cli.git'`.
+- If uv, Git or compatible Python is missing, report the prerequisite and ask the user to install it. Do not change system packages, shell configuration or privileges automatically. Do not install similarly named PyPI packages.
+- If the installed CLI is not on PATH, use its resolved absolute path consistently. `uv tool dir --bin` locates the executable directory; do not edit shell configuration.
+- Run `wanda doctor --json`. If Chrome/Chromium is missing, ask the user to install it before proceeding.
+
 ## Commands
 
-Execute these using whichever shell/process tool the agent provides. There are no framework-specific tool calls.
+Execute commands using the agent's shell tool.
 
 ```sh
 wanda doctor --json

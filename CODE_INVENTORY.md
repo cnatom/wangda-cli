@@ -6,3 +6,5 @@
 - Excluded: personal paths, shell/launchd guard, account/session data, concurrency/blocking experiments and internal training contents.
 
 Authority: `src/wangda/engine.py` owns platform playback logic; `browser.py` owns CDP and browser lifecycle; `runner.py` owns queue lifecycle; `state.py` owns persisted state; `cli.py` is the only command parser. Do not duplicate them in skills or platform integrations.
+
+Documentation: README.md is the project overview and skills.sh entry point; docs/usage.md owns CLI usage, runtime prerequisites and configuration; docs/agent-integration.md covers skill initialization and task control.
