@@ -3,7 +3,7 @@
 const readline = require('readline');
 
 let now = 0, nid = 1, timers = [];
-const D = {href: '', sections: [], body: '', video: null, clicks: []};
+const D = {href: '', sections: [], body: '', video: null, certificate: null, clicks: []};
 const storage = {};
 
 function mkSec(s, i) {
@@ -18,11 +18,51 @@ function mkSec(s, i) {
   };
 }
 
+function certRoot() {
+  const c = D.certificate;
+  if (!c || !c.exists) return null;
+  const link = {
+    innerText: c.action || '',
+    classList: {contains: () => false},
+    getAttribute: () => null,
+    click: () => { c.clicks = (c.clicks || []).concat('action'); },
+  };
+  return {
+    className: 'subject-certificate-entry ' + (c.claimed ? 'is-claimed' : 'is-unclaimed'),
+    classList: {contains: cl => cl === 'is-claimed' && !!c.claimed},
+    querySelector: sel => (sel === '.subject-certificate-entry__link' ? link : null),
+  };
+}
+
+function certDialog() {
+  const c = D.certificate;
+  if (!c || !c.dialogOpen) return null;
+  const button = (text, disabled) => ({
+    innerText: text,
+    classList: {contains: cl => cl === 'disabled' && !!disabled},
+    click: () => { c.clicks = (c.clicks || []).concat(text); },
+  });
+  const buttons = [button('关闭', false), button('下载证书', !!c.downloadDisabled)];
+  return {
+    offsetParent: {},
+    querySelectorAll: sel => (sel === '.dialog-footer .btn' ? buttons : []),
+  };
+}
+
+function certTemplate() {
+  return {closest: sel => (sel === '.dialog' ? certDialog() : null)};
+}
+
 globalThis.window = globalThis;
 globalThis.document = {
   title: 'fake',
   querySelectorAll: sel => (sel.indexOf('dl[data-sectiontype]') >= 0 ? D.sections.map(mkSec) : []),
-  querySelector: sel => (sel === 'video' ? D.video : null),
+  querySelector: sel => {
+    if (sel === 'video') return D.video;
+    if (sel === '.subject-certificate-entry') return certRoot();
+    if (sel === '.certificate-x-dialog') return D.certificate ? certTemplate() : null;
+    return null;
+  },
   body: {get innerText() { return D.body; }},
 };
 globalThis.location = {get href() { return D.href; }};

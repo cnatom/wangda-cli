@@ -18,6 +18,8 @@ The skill checks the runtime and installs the CLI from this repository using uv 
 
 `run --background` returns after the detached supervisor acknowledges ownership. Subsequent `status --json` reads the saved state without touching the website. Wait for an explicit terminal status before reporting completion. Do not run `inspect` during playback; the locks reject it rather than interrupting the course.
 
+Certificate claiming is an explicit user action, separate from playback. `wanda certificate '<subject-or-course-url>' --json` clicks only the platform's visible 领取证书 action and confirms the claimed state after a reload. `--download DIR` is opt-in and writes the platform-generated PNG locally. A certificate contains the learner's name and certificate number, so it must stay local. Do not auto-claim, and never retry `not_eligible` or `no_certificate` hoping the platform changes its mind.
+
 Authentication always belongs to the human. On waiting_login: explain the state, have the human complete `wanda login`, and resume after their confirmation. Do not exchange cookie/token files between the agent and user.
 
 ## API contract

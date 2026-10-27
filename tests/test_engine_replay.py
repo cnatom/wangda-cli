@@ -330,3 +330,48 @@ class RequiredItemSelectionTests(unittest.TestCase):
 
     def test_missing_opt_field_is_treated_as_required(self):
         self.assertEqual([i["id"] for i in wanda.required_items([{"id": "a", "st": "未开始"}])], ["a"])
+
+
+class CertificateDomTests(unittest.TestCase):
+    """证书入口只按平台可见状态判断，弹窗按钮必须从外层 .dialog 读取。"""
+
+    def setUp(self):
+        self.dom = NodePage()
+
+    def tearDown(self):
+        self.dom.close()
+
+    def test_claimable_state_requires_the_claim_action(self):
+        self.dom.set(certificate={"exists": True, "claimed": False, "action": "领取证书"})
+        state = json.loads(self.dom.js(wanda.CERTIFICATE_STATE))
+        self.assertTrue(state["exists"])
+        self.assertFalse(state["claimed"])
+        self.assertTrue(state["claimable"])
+
+    def test_claimed_state_is_not_claimable(self):
+        self.dom.set(certificate={"exists": True, "claimed": True, "action": "查看证书"})
+        state = json.loads(self.dom.js(wanda.CERTIFICATE_STATE))
+        self.assertTrue(state["claimed"])
+        self.assertFalse(state["claimable"])
+
+    def test_missing_certificate_entry_is_reported(self):
+        self.dom.set(certificate={"exists": False})
+        self.assertEqual(json.loads(self.dom.js(wanda.CERTIFICATE_STATE)), {"exists": False})
+
+    def test_dialog_reads_footer_from_the_outer_dialog(self):
+        self.dom.set(certificate={"exists": True, "claimed": True, "action": "查看证书",
+                                  "dialogOpen": True, "downloadDisabled": False})
+        self.assertEqual(json.loads(self.dom.js(wanda.CERTIFICATE_DIALOG_STATE)),
+                         {"open": True, "downloadable": True})
+        self.assertEqual(self.dom.js(wanda.CLICK_CERTIFICATE_DOWNLOAD), "clicked")
+        self.assertEqual(self.dom.js(wanda.CLOSE_CERTIFICATE_DIALOG), "closed")
+
+    def test_closed_dialog_is_not_clicked(self):
+        self.dom.set(certificate={"exists": True, "claimed": True, "action": "查看证书"})
+        self.assertFalse(json.loads(self.dom.js(wanda.CERTIFICATE_DIALOG_STATE))["open"])
+        self.assertEqual(self.dom.js(wanda.CLICK_CERTIFICATE_DOWNLOAD), "no-dialog")
+
+    def test_disabled_download_is_not_clicked(self):
+        self.dom.set(certificate={"exists": True, "claimed": True, "action": "查看证书",
+                                  "dialogOpen": True, "downloadDisabled": True})
+        self.assertEqual(self.dom.js(wanda.CLICK_CERTIFICATE_DOWNLOAD), "disabled")

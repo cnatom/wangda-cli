@@ -10,6 +10,8 @@
 wanda doctor --json
 wanda login
 wanda inspect '<课程或专题链接>' --json
+wanda certificate '<专题或专题课程链接>' --json
+wanda certificate '<专题或专题课程链接>' --download ./certificates --json
 wanda run '<链接 A>' '<链接 B>' --rate 1.5 --background --json
 wanda status --json
 wanda logs --tail 10 --json
@@ -27,7 +29,9 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 `run` 新建队列，多个链接顺序执行。`resume` 保留队列并跳过已确认完成的链接。课程续播位置由平台保存的进度决定。
 
-后台启动返回启动确认，最终结果以 `status` 为准；不加 `--background` 则前台运行。查询状态和日志不会打开或导航浏览器。运行期间不要执行 `inspect`。
+`certificate` 只点击平台已经显示的「领取证书」，领取后刷新页面确认服务端状态。`already_claimed` 表示此前已领取；`not_eligible` 表示条件未满足；`no_certificate` 表示该专题没有证书入口，三者都不会被绕过。`--download DIR` 会在领取后打开证书弹窗并把 PNG 保存到指定目录；默认不下载。刚完成手动登录时加 `--headed` 可复用当前可见窗口。证书含姓名和证书编号，只保存在本地，不要上传或粘贴到聊天、日志和 issue。
+
+后台启动返回启动确认，最终结果以 `status` 为准；不加 `--background` 则前台运行。查询状态和日志不会打开或导航浏览器。运行期间不要执行 `inspect` 或 `certificate`。
 
 暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 有意保持窗口，供本人登录；结束后可用 `stop` 关闭。机器重启后需显式恢复任务。
 
@@ -52,6 +56,7 @@ wanda status --data-dir ./.runtime
 - 支持视频项（type 10）和 URL 项的正常页面点击（type 3），未知必修类型需人工处理。
 - 支持 1.0 / 1.2 / 1.5 倍速，实际可用性以平台规则为准。
 - 完成判定核对课程目录和对应专题卡片；确认超时返回 `unconfirmed`，不反复重播。
+- 证书领取只使用平台可见的「领取证书」入口，可保存平台生成的证书 PNG；不伪造资格或证书。
 - 不做考试、不伪造学时或完成记录、不绕过账号并发限制。
 - 页面和账号权限变化可能影响运行，首次使用建议验证一门短课程。
 

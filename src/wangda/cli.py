@@ -14,7 +14,8 @@ from filelock import Timeout
 import psutil
 
 from . import __version__, engine
-from .adapter import LoginRequired, Unconfirmed, inspect, validate_url
+from .adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, claim_certificate,
+                      inspect, validate_url)
 from .browser import Browser, discover_browser
 from .config import load_config
 from .runner import Runner
@@ -56,11 +57,16 @@ def parser():
     result.add_argument('--version', action='version', version=__version__)
     add_common(result)
     commands = result.add_subparsers(dest='command', required=True)
-    for name in ('doctor', 'login', 'inspect', 'run', 'resume', 'status', 'pause', 'stop', 'logs', 'skill-path'):
+    for name in ('doctor', 'login', 'inspect', 'certificate', 'run', 'resume', 'status', 'pause', 'stop',
+                 'logs', 'skill-path'):
         sub = commands.add_parser(name)
         add_common(sub)
         if name == 'inspect':
             sub.add_argument('url')
+        if name == 'certificate':
+            sub.add_argument('url')
+            sub.add_argument('--download', metavar='DIR', default=None)
+            sub.add_argument('--headed', action=argparse.BooleanOptionalAction, default=None)
         if name == 'run':
             sub.add_argument('urls', nargs='+')
         if name in ('run', 'resume'):
@@ -175,6 +181,10 @@ def main(argv=None):
             with exclusive(config):
                 data = inspect(Browser(config), config, args.url)
                 emit({'status': 'inspected', 'data': data})
+        elif args.command == 'certificate':
+            validate_url(args.url)
+            with exclusive(config):
+                emit(claim_certificate(Browser(config), config, args.url, download_dir=args.download))
         elif args.command in ('run', 'resume'):
             resume = args.command == 'resume'
             urls = None if resume else [validate_url(url) for url in args.urls]
@@ -218,6 +228,9 @@ def main(argv=None):
     except LoginRequired:
         emit({'status': 'waiting_login', 'detail': 'Run wanda login and authenticate yourself'})
         return 3
+    except CertificateUnavailable as error:
+        emit({'status': error.status, 'detail': error.detail})
+        return 4
     except Unconfirmed:
         emit({'status': 'unconfirmed', 'detail': 'The platform did not expose a confirmed result'})
         return 4

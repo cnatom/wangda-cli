@@ -4,6 +4,7 @@ import subprocess
 import sys
 from unittest.mock import patch
 
+from wangda.adapter import CertificateUnavailable
 from wangda.state import Store
 from wangda.cli import main
 
@@ -90,3 +91,36 @@ def test_pause_ack_waits_until_runner_releases_its_locks(tmp_path):
          patch('time.sleep'):
         assert control(load_config(data_dir=tmp_path, env={}), 'pause', 1)['status'] == 'paused'
     assert len(calls) == 2
+
+
+CERT_SUBJECT = 'https://wangda.chinamobile.com/#/study/subject/detail/demo-topic/1'
+
+
+def test_certificate_command_emits_result_and_passes_download_dir(tmp_path, capsys):
+    target = tmp_path / 'cert.png'
+    with patch('wangda.cli.Browser') as browser, \
+         patch('wangda.cli.claim_certificate', return_value={'status': 'claimed', 'subject': 'demo-topic',
+                                                             'downloaded': True, 'file': str(target)}) as claim:
+        assert main(['certificate', CERT_SUBJECT, '--download', str(tmp_path),
+                     '--data-dir', str(tmp_path)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result['status'] == 'claimed'
+    assert result['file'] == str(target)
+    assert claim.call_args.kwargs['download_dir'] == str(tmp_path)
+    browser.assert_called_once()
+
+
+def test_certificate_not_eligible_returns_exit_4_and_keeps_status(tmp_path, capsys):
+    error = CertificateUnavailable('not_eligible', 'Certificate requirements are not met')
+    with patch('wangda.cli.Browser'), patch('wangda.cli.claim_certificate', side_effect=error):
+        assert main(['certificate', CERT_SUBJECT, '--data-dir', str(tmp_path)]) == 4
+    result = json.loads(capsys.readouterr().out)
+    assert result['status'] == 'not_eligible'
+    assert result['detail'] == 'Certificate requirements are not met'
+
+
+def test_certificate_invalid_url_returns_error_without_browser(tmp_path, capsys):
+    with patch('wangda.cli.Browser') as browser:
+        assert main(['certificate', 'https://example.test/', '--data-dir', str(tmp_path)]) == 2
+        browser.assert_not_called()
+    assert json.loads(capsys.readouterr().out)['status'] == 'error'

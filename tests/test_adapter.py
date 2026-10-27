@@ -1,7 +1,11 @@
+import os
+from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 from wangda import engine
-from wangda.adapter import validate_url, play, LoginRequired, Unconfirmed, UnsupportedItem
+from wangda.adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, UnsupportedItem,
+                            claim_certificate, download_certificate, download_snapshot, play,
+                            read_certificate_page, validate_url, wait_for_download)
 from wangda.config import load_config
 
 SUBJECT = 'https://wangda.chinamobile.com/#/study/subject/detail/demo-topic/1'
@@ -100,3 +104,145 @@ def test_delayed_exact_card_confirmation_reloads_without_replaying_course(tmp_pa
     page.call.assert_any_call('Page.reload', ignoreCache=True)
     page.js.assert_any_call(engine.STOP_PLAYBACK)
     playback.assert_called_once()
+
+
+CERT_CLAIMABLE = {'exists': True, 'claimed': False, 'claimable': True, 'action': '领取证书'}
+CERT_CLAIMED = {'exists': True, 'claimed': True, 'claimable': False, 'action': '查看证书'}
+CERT_INELIGIBLE = {'exists': True, 'claimed': False, 'claimable': False, 'action': ''}
+
+
+def certificate_config(tmp_path):
+    return load_config(data_dir=tmp_path, confirmation_seconds=0.01, poll_seconds=0.001, env={})
+
+
+def test_certificate_already_claimed_is_not_clicked(tmp_path):
+    browser, page = setup_browser()
+    with patch('wangda.adapter.prepare', return_value=page), \
+         patch('wangda.adapter.read_certificate_page', return_value=CERT_CLAIMED), \
+         patch.object(engine, 'click_certificate') as click:
+        result = claim_certificate(browser, certificate_config(tmp_path), SUBJECT)
+    assert result == {'status': 'already_claimed', 'subject': 'demo-topic'}
+    click.assert_not_called()
+    browser.close.assert_called_once()
+    page.close.assert_called_once()
+
+
+def test_certificate_claim_is_reloaded_to_verify_server_state(tmp_path):
+    browser, page = setup_browser()
+    with patch('wangda.adapter.prepare', return_value=page), \
+         patch('wangda.adapter.read_certificate_page', return_value=CERT_CLAIMABLE), \
+         patch('wangda.adapter.read_subject'), \
+         patch.object(engine, 'certificate_state', side_effect=[CERT_CLAIMED, CERT_CLAIMED]), \
+         patch.object(engine, 'click_certificate', return_value='clicked') as click:
+        result = claim_certificate(browser, certificate_config(tmp_path), SUBJECT)
+    assert result == {'status': 'claimed', 'subject': 'demo-topic'}
+    click.assert_called_once()
+    page.call.assert_any_call('Page.reload', ignoreCache=True)
+
+
+def test_certificate_unmet_conditions_are_not_clicked(tmp_path):
+    browser, page = setup_browser()
+    with patch('wangda.adapter.prepare', return_value=page), \
+         patch('wangda.adapter.read_certificate_page', return_value=CERT_INELIGIBLE), \
+         patch.object(engine, 'click_certificate') as click:
+        with pytest.raises(CertificateUnavailable) as raised:
+            claim_certificate(browser, certificate_config(tmp_path), SUBJECT)
+        click.assert_not_called()
+    assert raised.value.status == 'not_eligible'
+    browser.close.assert_called_once()
+
+
+def test_certificate_missing_entry_is_reported_without_click(tmp_path):
+    browser, page = setup_browser()
+    with patch('wangda.adapter.prepare', return_value=page), \
+         patch('wangda.adapter.read_certificate_page', return_value={'exists': False}), \
+         patch.object(engine, 'click_certificate') as click:
+        with pytest.raises(CertificateUnavailable) as raised:
+            claim_certificate(browser, certificate_config(tmp_path), SUBJECT)
+        click.assert_not_called()
+    assert raised.value.status == 'no_certificate'
+
+
+def test_certificate_claim_that_never_confirms_is_bounded(tmp_path):
+    browser, page = setup_browser()
+    with patch('wangda.adapter.prepare', return_value=page), \
+         patch('wangda.adapter.read_certificate_page', return_value=CERT_CLAIMABLE), \
+         patch.object(engine, 'certificate_state', return_value=CERT_INELIGIBLE), \
+         patch.object(engine, 'click_certificate', return_value='clicked'), \
+         patch('wangda.adapter.time.sleep'):
+        with pytest.raises(Unconfirmed):
+            claim_certificate(browser, certificate_config(tmp_path), SUBJECT)
+    page.call.assert_not_called()
+
+
+def test_certificate_download_runs_only_when_requested(tmp_path):
+    browser, page = setup_browser()
+    target = tmp_path / 'cert.png'
+    with patch('wangda.adapter.prepare', return_value=page), \
+         patch('wangda.adapter.read_certificate_page', return_value=CERT_CLAIMED), \
+         patch('wangda.adapter.download_certificate', return_value=target) as download:
+        result = claim_certificate(browser, certificate_config(tmp_path), SUBJECT,
+                                   download_dir=tmp_path / 'certs')
+    assert result['status'] == 'already_claimed'
+    assert result['downloaded'] is True
+    assert result['file'] == str(target)
+    download.assert_called_once()
+    assert download.call_args.args[1] == Path(tmp_path / 'certs')
+
+
+def test_read_certificate_page_waits_for_the_target_subject():
+    page = Mock()
+    hrefs = iter(['https://wangda.chinamobile.com/#/study/subject/detail/other/1',
+                  'https://wangda.chinamobile.com/#/study/subject/detail/demo-topic/1'])
+    page.js.side_effect = lambda expr: next(hrefs) if expr == 'location.href' else ''
+    with patch('wangda.adapter.engine.is_login_wall', return_value=False), \
+         patch('wangda.adapter.engine.certificate_state', return_value=CERT_CLAIMED) as state, \
+         patch('wangda.adapter.engine.subject_items', return_value={'items': []}), \
+         patch('wangda.adapter.time.sleep'):
+        assert read_certificate_page(page, 'subject-url', 'demo-topic') == CERT_CLAIMED
+    assert state.call_count == 1
+
+
+def test_wait_for_download_ignores_existing_zero_and_partial_files(tmp_path):
+    assert wait_for_download(tmp_path, {}, timeout=0) is None
+    (tmp_path / 'partial.png.crdownload').write_bytes(b'x')
+    (tmp_path / 'empty.png').write_bytes(b'')
+    assert wait_for_download(tmp_path, {}, timeout=0) is None
+    (tmp_path / 'old.png').write_bytes(b'old')
+    before = download_snapshot(tmp_path)
+    assert wait_for_download(tmp_path, before, timeout=0) is None
+    (tmp_path / 'new.png').write_bytes(b'png')
+    assert wait_for_download(tmp_path, before, timeout=0) == tmp_path / 'new.png'
+
+
+def test_wait_for_download_detects_a_same_named_overwrite(tmp_path):
+    target = tmp_path / 'cert.png'
+    target.write_bytes(b'old')
+    before = download_snapshot(tmp_path)
+    target.write_bytes(b'new-and-longer')
+    changed = before['cert.png'][1] + 1_000_000
+    os.utime(target, ns=(changed, changed))
+    assert wait_for_download(tmp_path, before, timeout=0) == target
+
+
+def test_download_certificate_opens_dialog_downloads_and_closes(tmp_path):
+    page = Mock()
+    target = tmp_path / 'cert.png'
+    with patch.object(engine, 'certificate_dialog', side_effect=[{'open': False}, {'open': True}]), \
+         patch.object(engine, 'click_certificate', return_value='clicked') as open_dialog, \
+         patch.object(engine, 'click_certificate_download', return_value='clicked') as download, \
+         patch.object(engine, 'close_certificate_dialog') as close, \
+         patch('wangda.adapter.wait_for_download', return_value=target):
+        assert download_certificate(page, tmp_path) == target
+    open_dialog.assert_called_once()
+    download.assert_called_once()
+    close.assert_called_once()
+    page.call.assert_any_call('Browser.setDownloadBehavior', behavior='allow',
+                              downloadPath=str(tmp_path.resolve()), eventsEnabled=True)
+
+
+def test_download_certificate_rejects_a_file_path(tmp_path):
+    target = tmp_path / 'not-a-directory'
+    target.write_bytes(b'x')
+    with pytest.raises(ValueError):
+        download_certificate(Mock(), target)

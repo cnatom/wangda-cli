@@ -242,6 +242,90 @@ CLICK_ITEM = r"""
 })()
 """
 
+CERTIFICATE_STATE = r"""
+(() => {
+  const root = document.querySelector('.subject-certificate-entry');
+  if (!root) return JSON.stringify({exists: false});
+  const link = root.querySelector('.subject-certificate-entry__link');
+  const action = link ? (link.innerText || '').replace(/\s+/g, ' ').trim() : '';
+  const blocked = !link || link.classList.contains('disabled') ||
+                  link.getAttribute('aria-disabled') === 'true';
+  const claimed = root.classList.contains('is-claimed');
+  return JSON.stringify({
+    exists: true,
+    claimed: claimed,
+    claimable: !claimed && !blocked && /领取/.test(action),
+    action: action
+  });
+})()
+"""
+
+CLICK_CERTIFICATE = r"""
+(() => {
+  const root = document.querySelector('.subject-certificate-entry');
+  const link = root ? root.querySelector('.subject-certificate-entry__link') : null;
+  if (!link) return 'no-button';
+  link.click();
+  return 'clicked';
+})()
+"""
+
+CERTIFICATE_DIALOG_STATE = r"""
+(() => {
+  const template = document.querySelector('.certificate-x-dialog');
+  const dialog = template ? template.closest('.dialog') : null;
+  if (!dialog || !dialog.offsetParent) return JSON.stringify({open: false});
+  const buttons = Array.from(dialog.querySelectorAll('.dialog-footer .btn'));
+  const download = buttons.find(e => (e.innerText || '').trim() === '下载证书');
+  return JSON.stringify({
+    open: true,
+    downloadable: !!download && !download.classList.contains('disabled')
+  });
+})()
+"""
+
+CLICK_CERTIFICATE_DOWNLOAD = r"""
+(() => {
+  const template = document.querySelector('.certificate-x-dialog');
+  const dialog = template ? template.closest('.dialog') : null;
+  if (!dialog || !dialog.offsetParent) return 'no-dialog';
+  const button = Array.from(dialog.querySelectorAll('.dialog-footer .btn'))
+    .find(e => (e.innerText || '').trim() === '下载证书');
+  if (!button) return 'no-button';
+  if (button.classList.contains('disabled')) return 'disabled';
+  button.click();
+  return 'clicked';
+})()
+"""
+
+CLOSE_CERTIFICATE_DIALOG = r"""
+(() => {
+  const template = document.querySelector('.certificate-x-dialog');
+  const dialog = template ? template.closest('.dialog') : null;
+  if (!dialog || !dialog.offsetParent) return 'no-dialog';
+  const button = Array.from(dialog.querySelectorAll('.dialog-footer .btn'))
+    .find(e => (e.innerText || '').trim() === '关闭');
+  if (!button) return 'no-button';
+  button.click();
+  return 'closed';
+})()
+"""
+
+def certificate_state(p):
+    return json.loads(p.js(CERTIFICATE_STATE))
+
+def certificate_dialog(p):
+    return json.loads(p.js(CERTIFICATE_DIALOG_STATE))
+
+def click_certificate(p):
+    return p.js(CLICK_CERTIFICATE)
+
+def click_certificate_download(p):
+    return p.js(CLICK_CERTIFICATE_DOWNLOAD)
+
+def close_certificate_dialog(p):
+    return p.js(CLOSE_CERTIFICATE_DIALOG)
+
 def close_new_popups(before_ids):
     """关掉点项按钮后 window.open 出来的外链标签，返回关掉的个数。"""
     n = 0

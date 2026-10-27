@@ -30,6 +30,10 @@ Authenticated video-course acceptance passed on macOS 27.0 / Chrome 155 on Octob
 4. Check a multi-link queue, pause/resume, login expiry and cleanup with the same account.
 5. Record OS/browser/package versions, never credentials or training contents.
 
+## Certificate claim acceptance
+
+Certificate claim acceptance passed on Windows 11 26200 / Chrome 156.0.8078.48 on October 27, 2026: a completed subject's entry changed from unclaimed to claimed, remained claimed after reload, and `--download` saved the platform PNG locally. The unclaimed click was verified against the live page before the command existed; the CLI path was then verified in the already-claimed and download state. Only one subject template was checked; other layouts may differ.
+
 The CI matrix covers Python 3.11/3.14 on macOS/Linux/Windows. Matrix success validates code and synthetic behavior, not institutional access, live browser playback, or the platform's current DOM. Login requires a graphical display; installing this on a Linux server does not magically provide SMS login.
 
 Known scope: a platform layout/rule change may break selectors; page confirmations can lag; partial-course recovery follows platform progress; no multi-account scheduling, no reboot daemon, no MCP server, no hosted login service, and no automatic learning-record repair.

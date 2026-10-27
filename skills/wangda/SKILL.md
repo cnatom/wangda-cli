@@ -1,16 +1,16 @@
 ---
 name: wangda
-description: Run and monitor Wangda courses with real playback.
+description: Run and monitor Wangda courses with real playback, and claim completion certificates.
 license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. Manual login needs a graphical browser.
 metadata:
   author: cnatom
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # Wangda real playback
 
-Use this skill when the user gives China Mobile Wangda course/subject links and asks to play, queue, resume, or check progress. Do not use it for other learning platforms, examinations, or generating completion records.
+Use this skill when the user gives China Mobile Wangda course/subject links and asks to play, queue, resume, check progress, or claim a completion certificate. Do not use it for other learning platforms, examinations, or generating completion records.
 
 ## Prerequisites
 
@@ -34,6 +34,8 @@ Execute commands using the agent's shell tool.
 wanda doctor --json
 wanda login
 wanda inspect 'https://wangda.chinamobile.com/#/study/subject/detail/EXAMPLE_TOPIC/1' --json
+wanda certificate '<subject-or-course-URL>' --json
+wanda certificate '<subject-or-course-URL>' --download '<local-directory>' --json
 wanda run '<subject-or-course-URL>' --rate 1.5 --background --json
 wanda run '<URL-A>' '<URL-B>' --background --json
 wanda status --json
@@ -57,9 +59,18 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 8. Only report completion when `status == "completed"` and every queue entry is completed with a verified result. Newly evaluated direct courses require both a full course directory/counter and their exact subject card marked completed (`confirmation: "course_and_subject"`). An increase in total completed items could belong to another course and is not proof. Browser exit code, elapsed time, video end, and local section changes alone are not enough.
 9. Completion/pause/stop automatically closes owned automation processes and retains the dedicated login profile. `login` intentionally leaves its window open; use `stop` to close it without deleting login state.
 
+## Certificate claiming
+
+1. Read `status` first. A certificate command is a browser operation; do not run it while a queue owns the profile.
+2. If the platform is at the login wall, ask the user to complete `wanda login` themselves. Never request, type, read, or log credentials, SMS codes, cookies, or tokens.
+3. Use the user's exact subject or subject-course URL. The command clicks only a visible 领取证书 action; `already_claimed` means nothing was clicked. After a manual login, add `--headed` to reuse that dedicated window instead of switching the profile to headless.
+4. Report `claimed` or `already_claimed` as platform-confirmed. `not_eligible` means the certificate conditions are not met and `no_certificate` means the page offers no certificate; do not retry, bypass, or fabricate either outcome.
+5. Download only when the user asks. `--download '<directory>'` saves the platform-generated PNG locally. Certificates contain the learner's name and certificate number: never upload, screenshot into chat, or paste their contents.
+
 ## Boundaries and pitfalls
 
 - No forged reports, learning-time edits, direct completion-report API calls, account-limit bypass, or parallel sessions for one account.
+- Never claim a certificate the platform has not visibly offered, and never modify certificate eligibility or generate a substitute certificate.
 - Rates are restricted to 1.0, 1.2, and 1.5; availability still depends on platform/account rules.
 - Only video (type 10) and normal URL-item UI clicks (type 3) are supported. Unknown required types need manual review.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
@@ -69,6 +80,6 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 
 ## Verification and output
 
-Command results are JSON with `schema_version: 1`; diagnostics go to stderr. Help/argument-usage messages are plain text. Exit codes: 0 successful command/completed/paused/stopped, 1 failure, 2 invalid configuration/input, 3 login required, 4 unconfirmed completion, 5 busy profile.
+Command results are JSON with `schema_version: 1`; diagnostics go to stderr. Help/argument-usage messages are plain text. Exit codes: 0 successful command/completed/paused/stopped/claimed/already_claimed, 1 failure, 2 invalid configuration/input, 3 login required, 4 unconfirmed/not_eligible/no_certificate, 5 busy profile.
 
-Summarize the current task, confirmed progress, outstanding items, and whether it is still running. Separate local playback evidence from platform-confirmed completion. Do not claim that every agent or operating system has been manually tested.
+Certificate results contain the subject id and, when requested, a local `file` path. They never include the certificate image contents or certificate number. Summarize the current task, confirmed progress, outstanding items, and whether it is still running. Separate local playback evidence from platform-confirmed completion. Do not claim that every agent or operating system has been manually tested.
