@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from wangda.adapter import CertificateUnavailable
 from wangda.state import Store
-from wangda.cli import main
+from wangda.cli import RUNNER_CREATIONFLAGS, main
 
 
 def test_status_is_json_and_does_not_create_profile_or_connect(tmp_path, capsys):
@@ -124,3 +124,10 @@ def test_certificate_invalid_url_returns_error_without_browser(tmp_path, capsys)
         assert main(['certificate', 'https://example.test/', '--data-dir', str(tmp_path)]) == 2
         browser.assert_not_called()
     assert json.loads(capsys.readouterr().out)['status'] == 'error'
+
+
+def test_runner_creationflags_hide_console_on_windows():
+    if os.name != 'nt':
+        return
+    assert RUNNER_CREATIONFLAGS & subprocess.CREATE_NO_WINDOW
+    assert RUNNER_CREATIONFLAGS & subprocess.CREATE_NEW_PROCESS_GROUP
