@@ -385,10 +385,19 @@ def is_login_wall(p):
         return False
 
 def ensure_course_page(p, course_id, subject_id, logpath):
-    """导航到课程页；平台把重复打开判为错误页时点「继续学习」恢复。"""
+    """导航到课程页；先清掉 SPA 残留课程，平台把重复打开判为错误页时点「继续学习」恢复。"""
     url = course_url(course_id, subject_id)
+
+    def reset_page():
+        try:
+            p.call("Page.navigate", url="about:blank")
+        except Exception:
+            pass
+        time.sleep(1)
+
+    reset_page()
     p.goto(url)
-    for attempt in range(3):
+    for attempt in range(4):
         href = p.js("location.href") or ""
         if is_login_wall(p):
             log(logpath, ev="login_required", href=href[:90])
@@ -400,6 +409,14 @@ def ensure_course_page(p, course_id, subject_id, logpath):
             if "/study/errors/" in (p.js("location.href") or ""):
                 p.goto(url)
                 continue
+        current = parse_url(href)[1]
+        if current != course_id:
+            # 快速切课后平台可能仍停在上一个自动跳转的课程；强制清空 SPA 再进入目标课程。
+            log(logpath, ev="course_mismatch_reset", course=course_id, cid=current, attempt=attempt)
+            reset_page()
+            p.goto(url)
+            time.sleep(5)
+            continue
         if p.js("document.querySelectorAll('dl[data-sectiontype]').length") or \
            p.js("!!document.querySelector('video')"):
             return True

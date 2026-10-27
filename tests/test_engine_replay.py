@@ -193,6 +193,48 @@ class CourseTotalTests(unittest.TestCase):
         self.assertIsNone(wanda.course_total_minutes(None))
 
 
+class StaleCoursePage:
+    """第一次导航仍停在旧课程，模拟平台自动跳课后的 SPA 残留状态。"""
+
+    def __init__(self, target, wrong):
+        self.target = target
+        self.wrong = wrong
+        self.href = ''
+        self.navigations = []
+        self.gotos = 0
+
+    def call(self, method, **params):
+        if method == 'Page.navigate':
+            self.navigations.append(params.get('url'))
+            self.href = params.get('url')
+        return {}
+
+    def goto(self, url, wait=6):
+        self.gotos += 1
+        self.href = self.wrong if self.gotos == 1 else self.target
+
+    def js(self, expression):
+        if expression == 'location.href':
+            return self.href
+        if "document.querySelectorAll('dl[data-sectiontype]').length" in expression:
+            return 1 if self.href == self.target else 0
+        if "!!document.querySelector('video')" in expression:
+            return self.href == self.target
+        return ''
+
+
+class CoursePageRecoveryTests(unittest.TestCase):
+    def test_stale_spa_course_is_reset_until_the_target_course_loads(self):
+        target = f"{wanda.HOST}/#/study/course/detail/subject-course/TARGET/6/SUBJ"
+        wrong = f"{wanda.HOST}/#/study/course/detail/subject-course/OLD/6/SUBJ"
+        page = StaleCoursePage(target, wrong)
+        with mock.patch.object(wanda, 'is_login_wall', return_value=False), \
+                mock.patch.object(wanda, 'log'), mock.patch.object(wanda.time, 'sleep'):
+            self.assertTrue(wanda.ensure_course_page(page, 'TARGET', 'SUBJ', None))
+        self.assertEqual(page.gotos, 2)
+        self.assertIn('about:blank', page.navigations)
+
+
 class ReloadThresholdTests(unittest.TestCase):
     def test_threshold_edges(self):
         self.assertFalse(wanda.need_reload(None))
