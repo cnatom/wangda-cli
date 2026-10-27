@@ -37,3 +37,17 @@ def test_dynamic_port_is_read_from_dedicated_profile(tmp_path):
     browser.config.profile.mkdir()
     (browser.config.profile / 'DevToolsActivePort').write_text('12345\n/devtools/browser/test\n')
     assert browser.port == 12345
+
+
+def test_browser_launch_mutes_all_audio(tmp_path):
+    from unittest.mock import patch
+    config = load_config(data_dir=tmp_path, env={})
+    browser = Browser(config)
+    with patch('wangda.browser.discover_browser', return_value='chrome'), \
+         patch('wangda.browser.subprocess.Popen') as popen, \
+         patch.object(browser, 'owned', side_effect=[[], [Mock()]]), \
+         patch.object(browser, 'http_json', return_value={}):
+        browser.open(headed=False)
+    args = popen.call_args.args[0]
+    assert '--mute-audio' in args
+    assert '--headless=new' in args

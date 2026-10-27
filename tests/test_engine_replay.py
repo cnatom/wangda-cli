@@ -163,6 +163,14 @@ class NodeCourseStateTests(unittest.TestCase):
         self.assertEqual(d.js("document.querySelector('video').playbackRate"), 1.5)
         self.assertEqual(d.js("window.__wk.rate"), 1.5)
 
+    def test_worker_mutes_video_and_sets_zero_volume(self):
+        d = self.dom
+        d.set(href=course_href(NEW_ID), sections=[sec("学习中", True)], body=prog(0, 1), video=dict(VIDEO))
+        d.js(worker(1.5))
+        d.advance(4000)
+        self.assertTrue(d.js("document.querySelector('video').muted"))
+        self.assertEqual(d.js("document.querySelector('video').volume"), 0)
+
     def test_stop_playback_clears_own_timer_before_pausing_the_video(self):
         d = self.dom
         d.set(href=course_href(NEW_ID), sections=[sec("学习中", True)], body=prog(0, 1), video=VIDEO)

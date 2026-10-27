@@ -164,7 +164,7 @@ class Browser:
         args = [executable, f'--user-data-dir={self.config.profile}',
                 f'--remote-debugging-port={self.config.port}', '--remote-debugging-address=127.0.0.1',
                 '--no-first-run', '--no-default-browser-check', '--window-size=1280,900',
-                '--autoplay-policy=no-user-gesture-required', *ANTI_FREEZE]
+                '--autoplay-policy=no-user-gesture-required', '--mute-audio', *ANTI_FREEZE]
         if not headed:
             args += ['--headless=new']
         args += ['about:blank']

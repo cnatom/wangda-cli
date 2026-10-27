@@ -70,6 +70,7 @@ WORKER = r"""
     if (v) {
       S.v = {cur: Math.round(v.currentTime), dur: Math.round(v.duration || 0), paused: v.paused, rate: v.playbackRate};
       v.muted = true;
+      v.volume = 0;
       if (Math.abs((v.playbackRate || 1) - S.rate) > 0.01) { try { v.playbackRate = S.rate; } catch (e) {} }
       if (v.paused && !v.ended) { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
     } else {

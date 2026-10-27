@@ -71,6 +71,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 
 - No forged reports, learning-time edits, direct completion-report API calls, account-limit bypass, or parallel sessions for one account.
 - Never claim a certificate the platform has not visibly offered, and never modify certificate eligibility or generate a substitute certificate.
+- Playback is muted at the browser level (`--mute-audio`) and the player volume is set to 0. Do not unmute it or add audio.
 - Rates are restricted to 1.0, 1.2, and 1.5; availability still depends on platform/account rules.
 - Only video (type 10) and normal URL-item UI clicks (type 3) are supported. Unknown required types need manual review.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
