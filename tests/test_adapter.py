@@ -65,6 +65,38 @@ def test_unknown_item_type_is_not_clicked(tmp_path):
         click.assert_not_called()
 
 
+def test_subject_continues_after_failed_course_when_configured(tmp_path):
+    browser, _ = setup_browser()
+    data = {'progress': '', 'items': [{'id': 'a', 'type': '10', 'st': '未开始', 'opt': False},
+                                      {'id': 'b', 'type': '10', 'st': '未开始', 'opt': False}]}
+    calls = []
+    def run_course(page, course_id, subject, rate, logpath):
+        calls.append(course_id)
+        return course_id == 'b'
+    config = load_config(data_dir=tmp_path, continue_on_error=True, env={})
+    with patch('wangda.adapter.read_subject', return_value=data), \
+         patch.object(engine, 'run_course', side_effect=run_course), \
+         patch.object(engine, 'log'):
+        with pytest.raises(Unconfirmed):
+            play(browser, config, SUBJECT)
+    assert calls == ['a', 'b']
+
+
+def test_subject_stops_after_failed_course_by_default(tmp_path):
+    browser, _ = setup_browser()
+    data = {'progress': '', 'items': [{'id': 'a', 'type': '10', 'st': '未开始', 'opt': False},
+                                      {'id': 'b', 'type': '10', 'st': '未开始', 'opt': False}]}
+    calls = []
+    def run_course(page, course_id, subject, rate, logpath):
+        calls.append(course_id)
+        return False
+    with patch('wangda.adapter.read_subject', return_value=data), \
+         patch.object(engine, 'run_course', side_effect=run_course):
+        with pytest.raises(Unconfirmed):
+            play(browser, load_config(data_dir=tmp_path, env={}), SUBJECT)
+    assert calls == ['a']
+
+
 def test_topic_requires_final_platform_confirmation(tmp_path):
     browser, _ = setup_browser()
     pending = {'progress': '0/1', 'items': [{'id': 'a', 'type': '10', 'st': '未开始'}]}

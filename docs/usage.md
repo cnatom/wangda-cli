@@ -36,7 +36,7 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 `--background` 的 runner 和 worker 在 Windows 上使用隐藏控制台启动，不会额外弹出终端窗口。若仍看到旧终端，说明是旧版本遗留进程；先 `stop`，再用当前版本 `run`/`resume`。
 
-`--continue-on-error` 让队列在单个链接失败或 `unconfirmed` 后继续处理后续链接。登录失效、暂停和停止仍立即终止。失败项在队列中保留 `failed`/`unconfirmed`，最终整体状态仍为 `failed`/`unconfirmed`，不会把失败项算作完成。
+`--continue-on-error` 让队列在单个链接失败或 `unconfirmed` 后继续处理后续链接；同一专题内某门必修课失败时也会跳过该门并继续后续课程。登录失效、暂停和停止仍立即终止。失败项在队列中保留 `failed`/`unconfirmed`，最终整体状态仍为 `failed`/`unconfirmed`，不会把失败项算作完成。
 
 暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 有意保持窗口，供本人登录；结束后可用 `stop` 关闭。机器重启后需显式恢复任务。
 

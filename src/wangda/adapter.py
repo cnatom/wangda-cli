@@ -278,17 +278,28 @@ def play(browser, config, url):
         pending = engine.required_items(data['items'])
         # All video sessions finish before link clicks, which can supersede playback sessions.
         ordered = sorted(pending, key=lambda item: item.get('type') != '10')
+        failures = []
         for item in ordered:
             if item.get('type') == '10':
                 if not engine.run_course(page, item['id'], subject, config.rate, None):
                     if engine.is_login_wall(page):
                         raise LoginRequired()
+                    if config.continue_on_error:
+                        failures.append(item['id'])
+                        engine.log(None, ev='course_skipped', course=item['id'], reason='unconfirmed')
+                        continue
                     raise Unconfirmed('A required course did not confirm completion')
             elif item.get('type') == '3':
                 read_subject(page, url)
                 engine.click_item(page, item['id'], None)
+            elif config.continue_on_error:
+                failures.append(item['id'])
+                engine.log(None, ev='course_skipped', course=item['id'], reason='unsupported_type')
             else:
                 raise UnsupportedItem('Unsupported required item type: manual review needed')
+        if failures:
+            engine.log(None, ev='subject_partial', failed=failures)
+            raise Unconfirmed('Required items did not confirm completion; continue_on_error skipped them')
         data = confirm_subject(page, config, url)
         return {'verified': True, 'subject': subject, 'progress': data['progress'], 'items': data['items']}
     finally:

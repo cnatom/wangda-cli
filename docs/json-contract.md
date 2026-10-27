@@ -19,7 +19,7 @@ From package 0.1.1, a newly evaluated direct-course result additionally includes
 
 A missing snapshot yields idle plus an empty queue. `interrupted` is derived when a saved running owner no longer exists with the same creation time; the status command never writes a repair. A fresh supervisor heartbeat is distinct from advancing video time.
 
-With `--continue-on-error`, every queue entry is attempted even after a failed or unconfirmed item. Those entries keep their `failed`/`unconfirmed` status, and the overall run status is still `failed` or `unconfirmed`; the option never rewrites a failed item as completed. Login, pause and stop remain terminal.
+With `--continue-on-error`, every queue entry and every required item within a subject is attempted even after a failed or unconfirmed item. Those entries keep their `failed`/`unconfirmed` status, and the overall run status is still `failed` or `unconfirmed`; the option never rewrites a failed item as completed. Login, pause and stop remain terminal.
 
 ## Certificate result
 
