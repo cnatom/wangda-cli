@@ -3,6 +3,7 @@
 [wangda]
 rate = 1.5
 headed = false
+continue_on_error = false  # keep going after failed/unconfirmed items; login still stops
 port = 0                # 0: Chrome chooses a free loopback CDP port
 retries = 2             # task retries after process/network failure (not login/unconfirmed)
 stale_seconds = 180

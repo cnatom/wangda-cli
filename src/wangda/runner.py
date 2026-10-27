@@ -191,6 +191,8 @@ class Runner:
                     old_handlers[sig] = signal.signal(sig, interrupted)
             try:
                 with (log_dir / f"events-{self.state['run_id']}.jsonl").open('a', encoding='utf-8') as log_handle:
+                    saw_failed = False
+                    saw_unconfirmed = False
                     for index, item in enumerate(items):
                         self.state['index'] = index
                         if item['status'] == 'completed':
@@ -205,15 +207,28 @@ class Runner:
                             self.save()
                             if status == 'completed':
                                 break
-                            if status != 'failed' or attempt == self.config.retries:
+                            if status in ('paused', 'stopped', 'waiting_login'):
                                 return self.finish(status)
-                            end = time.monotonic() + min(30, self.retry_delay * 2 ** attempt)
-                            while time.monotonic() < end:
-                                action = self.store.command(self.state['run_id'])
-                                if action:
-                                    return self.finish('paused' if action == 'pause' else 'stopped')
-                                time.sleep(min(self.config.poll_seconds, max(0, end - time.monotonic())))
+                            if status == 'failed' and attempt < self.config.retries:
+                                end = time.monotonic() + min(30, self.retry_delay * 2 ** attempt)
+                                while time.monotonic() < end:
+                                    action = self.store.command(self.state['run_id'])
+                                    if action:
+                                        return self.finish('paused' if action == 'pause' else 'stopped')
+                                    time.sleep(min(self.config.poll_seconds, max(0, end - time.monotonic())))
+                                continue
+                            if not self.config.continue_on_error:
+                                return self.finish(status)
+                            if status == 'failed':
+                                saw_failed = True
+                            elif status == 'unconfirmed':
+                                saw_unconfirmed = True
+                            break
                     self.state['index'] = len(items)
+                    if saw_failed:
+                        return self.finish('failed')
+                    if saw_unconfirmed:
+                        return self.finish('unconfirmed')
                     return self.finish('completed')
             except KeyboardInterrupt:
                 return self.finish('stopped')

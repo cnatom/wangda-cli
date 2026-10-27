@@ -13,6 +13,7 @@ wanda inspect '<课程或专题链接>' --json
 wanda certificate '<专题或专题课程链接>' --json
 wanda certificate '<专题或专题课程链接>' --download ./certificates --json
 wanda run '<链接 A>' '<链接 B>' --rate 1.5 --background --json
+wanda run '<链接 A>' '<链接 B>' --continue-on-error --background --json
 wanda status --json
 wanda logs --tail 10 --json
 wanda pause --json
@@ -35,6 +36,8 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 `--background` 的 runner 和 worker 在 Windows 上使用隐藏控制台启动，不会额外弹出终端窗口。若仍看到旧终端，说明是旧版本遗留进程；先 `stop`，再用当前版本 `run`/`resume`。
 
+`--continue-on-error` 让队列在单个链接失败或 `unconfirmed` 后继续处理后续链接。登录失效、暂停和停止仍立即终止。失败项在队列中保留 `failed`/`unconfirmed`，最终整体状态仍为 `failed`/`unconfirmed`，不会把失败项算作完成。
+
 暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 有意保持窗口，供本人登录；结束后可用 `stop` 关闭。机器重启后需显式恢复任务。
 
 ## 配置
@@ -49,7 +52,7 @@ wanda status --data-dir ./.runtime
 
 同一任务每次调用必须使用相同配置和数据目录。默认目录由 platformdirs 选择：macOS Application Support、Linux XDG data、Windows 本地应用数据目录。浏览器 profile、状态和日志保存在本地；CDP 默认使用空闲本地端口。
 
-环境变量：`WANDA_CONFIG`、`WANDA_DATA_DIR`、`WANDA_PROFILE`、`WANDA_BROWSER`、`WANDA_PORT`、`WANDA_RATE`、`WANDA_HEADED`、`WANDA_RETRIES`、`WANDA_STALE_SECONDS`、`WANDA_CONFIRMATION_SECONDS`、`WANDA_POLL_SECONDS`。
+环境变量：`WANDA_CONFIG`、`WANDA_DATA_DIR`、`WANDA_PROFILE`、`WANDA_BROWSER`、`WANDA_PORT`、`WANDA_RATE`、`WANDA_HEADED`、`WANDA_CONTINUE_ON_ERROR`、`WANDA_RETRIES`、`WANDA_STALE_SECONDS`、`WANDA_CONFIRMATION_SECONDS`、`WANDA_POLL_SECONDS`。
 
 不要使用日常浏览器 profile。登录态和日志不要共享或提交。参见 [安全说明](../SECURITY.md)。
 

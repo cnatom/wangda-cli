@@ -75,6 +75,7 @@ def parser():
             sub.add_argument('--rate', type=float, default=None)
             sub.add_argument('--headed', action=argparse.BooleanOptionalAction, default=None)
             sub.add_argument('--retries', type=int, default=None)
+            sub.add_argument('--continue-on-error', action=argparse.BooleanOptionalAction, default=None)
             sub.add_argument('--background', action='store_true')
         if name in ('pause', 'stop'):
             sub.add_argument('--timeout', type=float, default=15)
@@ -141,7 +142,8 @@ def control(config, action, timeout):
 def main(argv=None):
     args = parser().parse_args(argv)
     values = vars(args)
-    overrides = {key: values.get(key) for key in ('data_dir', 'profile', 'browser', 'port', 'rate', 'headed', 'retries')}
+    overrides = {key: values.get(key) for key in ('data_dir', 'profile', 'browser', 'port', 'rate',
+                                                  'headed', 'retries', 'continue_on_error')}
     old_sink = engine.EVENT_SINK
     engine.EVENT_SINK = lambda event: print(json.dumps(scrub(event), ensure_ascii=False), file=sys.stderr, flush=True)
     try:

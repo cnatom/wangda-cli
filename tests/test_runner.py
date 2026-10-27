@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import subprocess
 import sys
@@ -116,3 +116,63 @@ def test_worker_creationflags_hide_console_on_windows():
     if os.name != 'nt':
         pytest.skip('Windows-only console flag')
     assert WORKER_CREATIONFLAGS & subprocess.CREATE_NO_WINDOW
+
+
+def test_continue_on_error_attempts_remaining_items_and_reports_partial(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, retries=0,
+                      continue_on_error=True, env={})
+    seen = []
+    def worker(config, url):
+        seen.append(url)
+        status = 'completed' if url == URL_B else 'unconfirmed'
+        script = ('import json; print(json.dumps({"ev":"result","status":"%s","verified":%s}), flush=True)'
+                  % (status, 'True' if status == 'completed' else 'False'))
+        return command(script)
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A, URL_B]) == 4
+    state = Store(tmp_path).read()
+    assert [item['status'] for item in state['queue']] == ['unconfirmed', 'completed']
+    assert seen == [URL_A, URL_B]
+    assert state['status'] == 'unconfirmed'
+
+
+def test_continue_on_error_keeps_going_after_failed_item(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, retries=0,
+                      continue_on_error=True, env={})
+    seen = []
+    def worker(config, url):
+        seen.append(url)
+        status = 'completed' if url == URL_B else 'failed'
+        script = ('import json; print(json.dumps({"ev":"result","status":"%s","verified":%s}), flush=True)'
+                  % (status, 'True' if status == 'completed' else 'False'))
+        return command(script)
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A, URL_B]) == 1
+    state = Store(tmp_path).read()
+    assert [item['status'] for item in state['queue']] == ['failed', 'completed']
+    assert seen == [URL_A, URL_B]
+    assert state['status'] == 'failed'
+
+
+def test_without_continue_on_error_unconfirmed_stops_the_queue(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, retries=0, env={})
+    seen = []
+    def worker(config, url):
+        seen.append(url)
+        return command('print(\'{"ev":"result","status":"unconfirmed","verified":false}\')')
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A, URL_B]) == 4
+    assert seen == [URL_A]
+    state = Store(tmp_path).read()
+    assert [item['status'] for item in state['queue']] == ['unconfirmed', 'pending']
+
+
+def test_continue_on_error_still_stops_for_login(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, retries=0,
+                      continue_on_error=True, env={})
+    seen = []
+    def worker(config, url):
+        seen.append(url)
+        return command('print(\'{"ev":"result","status":"waiting_login","verified":false}\')')
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A, URL_B]) == 3
+    assert seen == [URL_A]
+    state = Store(tmp_path).read()
+    assert state['status'] == 'waiting_login'
+

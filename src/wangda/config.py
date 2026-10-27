@@ -16,6 +16,7 @@ class Config:
     port: int = 0
     rate: float = 1.5
     headed: bool = False
+    continue_on_error: bool = False
     retries: int = 2
     stale_seconds: float = 180
     confirmation_seconds: float = 180
@@ -55,10 +56,11 @@ def load_config(config_file=None, env=None, base=None, **overrides):
     for key in ('rate', 'stale_seconds', 'confirmation_seconds', 'poll_seconds'):
         if key in values:
             values[key] = float(values[key])
-    if isinstance(values.get('headed'), str):
-        if values['headed'].lower() not in ('true', 'false', '1', '0'):
-            raise ValueError('headed must be true or false')
-        values['headed'] = values['headed'].lower() in ('true', '1')
+    for key in ('headed', 'continue_on_error'):
+        if isinstance(values.get(key), str):
+            if values[key].lower() not in ('true', 'false', '1', '0'):
+                raise ValueError(f'{key} must be true or false')
+            values[key] = values[key].lower() in ('true', '1')
     config = Config(data_dir=data_dir, profile=profile, **values)
     if not math.isfinite(config.rate) or config.rate not in (1.0, 1.2, 1.5):
         raise ValueError('rate must be a platform-supported value: 1.0, 1.2 or 1.5')

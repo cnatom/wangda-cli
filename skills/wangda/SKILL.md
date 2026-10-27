@@ -55,7 +55,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 4. Poll `status` at reasonable intervals (for example once per minute or on user request). It reads only the local atomic snapshot. `logs` also reads local files and does not connect to the browser.
 5. On `waiting_login`, tell the user to authenticate manually, then explicitly `resume`. Do not auto-retry login or open extra windows.
 6. On `paused` or `stopped`, do not resume without the user's intent. On `interrupted`, explain that the runner died; an explicit `resume` rechecks the platform and skips completed queue entries.
-7. On `unconfirmed`, report it as unconfirmed. Do not convert it to success, repeatedly replay the task, or click unsupported required item types.
+7. On `unconfirmed`, report it as unconfirmed. Do not convert it to success, repeatedly replay the task, or click unsupported required item types. Only when the user explicitly says to ignore failures, pass `--continue-on-error` to `run`/`resume`: the queue continues with later links, but failed/unconfirmed entries stay failed and the final status remains `failed`/`unconfirmed`.
 8. Only report completion when `status == "completed"` and every queue entry is completed with a verified result. Newly evaluated direct courses require both a full course directory/counter and their exact subject card marked completed (`confirmation: "course_and_subject"`). An increase in total completed items could belong to another course and is not proof. Browser exit code, elapsed time, video end, and local section changes alone are not enough.
 9. Completion/pause/stop automatically closes owned automation processes and retains the dedicated login profile. `login` intentionally leaves its window open; use `stop` to close it without deleting login state.
 
@@ -73,6 +73,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - Never claim a certificate the platform has not visibly offered, and never modify certificate eligibility or generate a substitute certificate.
 - Playback is muted at the browser level (`--mute-audio`) and the player volume is set to 0. Do not unmute it or add audio.
 - Background runner and worker processes must not open a visible terminal window. If one appears, stop the queue and restart with the current version.
+- `--continue-on-error` is allowed only when the user asks to ignore failures. It never turns a failed/unconfirmed item into completed.
 - Rates are restricted to 1.0, 1.2, and 1.5; availability still depends on platform/account rules.
 - Only video (type 10) and normal URL-item UI clicks (type 3) are supported. Unknown required types need manual review.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
