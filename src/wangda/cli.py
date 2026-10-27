@@ -92,7 +92,8 @@ def start_background(config, urls, resume):
     path = requests / f'{run_id}.json'
     atomic_json(path, {'config': config.as_dict(), 'urls': urls, 'resume': resume, 'run_id': run_id})
     options = {'start_new_session': True} if os.name != 'nt' else {
-        'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS}
+        'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        | subprocess.CREATE_NO_WINDOW}
     proc = subprocess.Popen([sys.executable, '-m', 'wangda.runner', str(path)],
                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **options)
     deadline = time.monotonic() + 10

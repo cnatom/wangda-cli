@@ -33,6 +33,8 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 后台启动返回启动确认，最终结果以 `status` 为准；不加 `--background` 则前台运行。查询状态和日志不会打开或导航浏览器。运行期间不要执行 `inspect` 或 `certificate`。
 
+`--background` 的 runner 和 worker 在 Windows 上使用隐藏控制台启动，不会额外弹出终端窗口。若仍看到旧终端，说明是旧版本遗留进程；先 `stop`，再用当前版本 `run`/`resume`。
+
 暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 有意保持窗口，供本人登录；结束后可用 `stop` 关闭。机器重启后需显式恢复任务。
 
 ## 配置

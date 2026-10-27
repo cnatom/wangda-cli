@@ -20,6 +20,7 @@ from .state import Store, atomic_json, exclusive, scrub, timestamp
 
 EXIT_CODES = {'completed': 0, 'stopped': 0, 'paused': 0, 'waiting_login': 3, 'unconfirmed': 4, 'failed': 1}
 HEALTH_EVENTS = {'tick', 'course_start', 'subject', 'confirm_wait', 'course_done'}
+WORKER_CREATIONFLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
 
 def worker_command(config, url):
@@ -92,10 +93,11 @@ class Runner:
         messages = queue.Queue()
         # Windows pipes otherwise use the legacy locale codec, corrupting Chinese progress text.
         env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'}
+        options = {'creationflags': WORKER_CREATIONFLAGS} if os.name == 'nt' else {}
         self.child = subprocess.Popen(self.worker_command(self.config, item['url']),
                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                       stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
-                                      errors='replace', env=env)
+                                      errors='replace', env=env, **options)
         self.state['worker_pid'] = self.child.pid
         try:
             self.state['worker'] = {'pid': self.child.pid, 'created': psutil.Process(self.child.pid).create_time()}

@@ -1,9 +1,11 @@
 import json
+import os
+import subprocess
 import sys
 import pytest
 from wangda.config import load_config
 from wangda.state import Store
-from wangda.runner import Runner
+from wangda.runner import WORKER_CREATIONFLAGS, Runner
 
 URL_A = 'https://wangda.chinamobile.com/#/study/subject/detail/demo-a/1'
 URL_B = 'https://wangda.chinamobile.com/#/study/subject/detail/demo-b/1'
@@ -108,3 +110,9 @@ def test_worker_output_is_utf8_even_when_parent_locale_is_not(tmp_path):
               (tmp_path / 'logs' / f"events-{state['run_id']}.jsonl").read_text(encoding='utf-8').splitlines()]
     subject = next(event for event in events if event['ev'] == 'subject')
     assert subject['prog'] == '完成 0 项 / 共 1 项'
+
+
+def test_worker_creationflags_hide_console_on_windows():
+    if os.name != 'nt':
+        pytest.skip('Windows-only console flag')
+    assert WORKER_CREATIONFLAGS & subprocess.CREATE_NO_WINDOW
