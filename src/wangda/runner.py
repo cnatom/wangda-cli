@@ -1,6 +1,7 @@
 """Persisted sequential supervisor with bounded, interruptible recovery."""
 from copy import deepcopy
 import json
+import os
 from pathlib import Path
 import queue
 import signal
@@ -89,9 +90,12 @@ class Runner:
 
     def attempt(self, item, log_handle):
         messages = queue.Queue()
+        # Windows pipes otherwise use the legacy locale codec, corrupting Chinese progress text.
+        env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'}
         self.child = subprocess.Popen(self.worker_command(self.config, item['url']),
                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                      stderr=subprocess.DEVNULL, text=True, encoding='utf-8', errors='replace')
+                                      stderr=subprocess.DEVNULL, text=True, encoding='utf-8',
+                                      errors='replace', env=env)
         self.state['worker_pid'] = self.child.pid
         try:
             self.state['worker'] = {'pid': self.child.pid, 'created': psutil.Process(self.child.pid).create_time()}

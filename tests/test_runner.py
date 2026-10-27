@@ -1,3 +1,4 @@
+import json
 import sys
 import pytest
 from wangda.config import load_config
@@ -94,3 +95,16 @@ def test_resume_without_queue_is_rejected_before_browser_use(tmp_path):
     cfg = load_config(data_dir=tmp_path, env={})
     with pytest.raises(ValueError):
         Runner(cfg, browser=NoBrowser()).run(resume=True)
+
+
+def test_worker_output_is_utf8_even_when_parent_locale_is_not(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, env={})
+    script = ('import json; '
+              'print(json.dumps({"ev":"subject","prog":"完成 0 项 / 共 1 项"}, ensure_ascii=False), flush=True); '
+              'print(json.dumps({"ev":"result","status":"completed","verified":True}), flush=True)')
+    assert Runner(cfg, worker_command=lambda *_: command(script), browser=NoBrowser()).run([URL_A]) == 0
+    state = Store(tmp_path).read()
+    events = [json.loads(line) for line in
+              (tmp_path / 'logs' / f"events-{state['run_id']}.jsonl").read_text(encoding='utf-8').splitlines()]
+    subject = next(event for event in events if event['ev'] == 'subject')
+    assert subject['prog'] == '完成 0 项 / 共 1 项'
