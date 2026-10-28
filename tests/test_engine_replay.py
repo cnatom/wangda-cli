@@ -325,6 +325,41 @@ class RunCourseReplayTests(unittest.TestCase):
         self.assertTrue([e for e in events if e["ev"] == "course_unconfirmed"])
         self.assertLess(self.clock[0] - self.start, 300 + wanda.CREDIT_WAIT_S + 120)
 
+    def test_absent_page_counter_times_out_fast_and_reports_reason(self):
+        """整课节次已完成但该版页面没有「完成 x 节 / 共 y 节」计数：不得空等满 CREDIT_WAIT_S。"""
+        self.dom.set(href=course_href(NEW_ID), sections=[sec("已完成", True)], body="", video=VIDEO)
+        result = self._run(NEW_ID)
+        events = self._events()
+        self.assertFalse(result)
+        self.assertEqual(getattr(result, "reason", None), "counter_absent")
+        unc = [e for e in events if e["ev"] == "course_unconfirmed"]
+        self.assertTrue(unc)
+        self.assertEqual(unc[0].get("reason"), "counter_absent")
+        self.assertLess(self.clock[0] - self.start, wanda.CREDIT_WAIT_S)
+
+    def test_counter_incomplete_keeps_the_full_credit_wait(self):
+        """计数存在但没到 x/x：仍按原规则等满 CREDIT_WAIT_S，不放宽确认口径。"""
+        self.dom.set(href=course_href(NEW_ID), sections=[sec("已完成", True)], body=prog(1, 2), video=VIDEO)
+        result = self._run(NEW_ID)
+        events = self._events()
+        self.assertFalse(result)
+        self.assertEqual(getattr(result, "reason", None), "counter_incomplete")
+        unc = [e for e in events if e["ev"] == "course_unconfirmed"]
+        self.assertEqual(unc[0].get("reason"), "counter_incomplete")
+        self.assertGreaterEqual(self.clock[0] - self.start, wanda.CREDIT_WAIT_S)
+
+    def test_page_advancing_after_all_done_does_not_replay(self):
+        """全部节次完成后平台自动切到下一门课：不得重新进入并从头重播。"""
+        self.dom.set(href=course_href(NEW_ID), sections=[sec("已完成", True)], body="", video=VIDEO)
+        self.hooks.append(lambda t: t >= 40 and self.dom.set(href=course_href(OLD_ID)))
+        result = self._run(NEW_ID)
+        events = self._events()
+        self.assertFalse(result)
+        self.assertEqual(getattr(result, "reason", None), "page_advanced")
+        self.assertEqual([e for e in events if e["ev"] == "course_start"], [e for e in events if e["ev"] == "course_start"][:1])
+        self.assertEqual([e for e in events if e["ev"] == "course_mismatch_reset"], [])
+        self.assertLess(self.clock[0] - self.start, 200)
+
     def test_error_page_stops_without_resume_click(self):
         self._stale_previous_course_done()
         self.hooks.append(lambda t: t >= 60 and self.dom.set(href=f"{wanda.HOST}/#/study/errors/{NEW_ID}&1"))

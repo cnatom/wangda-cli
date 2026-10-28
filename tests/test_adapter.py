@@ -41,6 +41,43 @@ def test_failed_course_is_not_reported_success(tmp_path):
     page.close.assert_called_once()
 
 
+def test_credited_card_rescues_course_without_page_counter(tmp_path):
+    """节次本地全完成但页面无计数时，以专题卡片「已完成」为准，而不是判失败重播。"""
+    browser, page = setup_browser()
+    pending = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '学习中', 'opt': False}]}
+    done = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '已完成', 'opt': False}]}
+    with patch.object(engine, 'run_course', return_value=engine.CourseResult(False, 'counter_absent')), \
+            patch.object(engine, 'is_login_wall', return_value=False), \
+            patch('wangda.adapter.read_subject', side_effect=[pending, done]), \
+            patch('wangda.adapter.confirm_subject', return_value=done) as confirm:
+        result = play(browser, load_config(data_dir=tmp_path, env={}), SUBJECT)
+    assert result['verified'] is True
+    confirm.assert_called_once()
+
+
+def test_uncredited_card_still_fails_after_counter_absent(tmp_path):
+    """卡片没有「已完成」时不得凭节次状态放宽确认。"""
+    browser, page = setup_browser()
+    pending = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '学习中', 'opt': False}]}
+    with patch.object(engine, 'run_course', return_value=engine.CourseResult(False, 'counter_absent')), \
+            patch.object(engine, 'is_login_wall', return_value=False), \
+            patch('wangda.adapter.read_subject', side_effect=[pending, pending, pending]):
+        with pytest.raises(Unconfirmed):
+            play(browser, load_config(data_dir=tmp_path, env={}), SUBJECT)
+
+
+def test_counter_incomplete_failure_is_not_rescued(tmp_path):
+    """计数存在但没到 x/x 的失败仍按失败处理，不读卡片兜底。"""
+    browser, page = setup_browser()
+    pending = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '学习中', 'opt': False}]}
+    with patch.object(engine, 'run_course', return_value=engine.CourseResult(False, 'counter_incomplete')), \
+            patch.object(engine, 'is_login_wall', return_value=False), \
+            patch('wangda.adapter.read_subject', side_effect=[pending]) as reader:
+        with pytest.raises(Unconfirmed):
+            play(browser, load_config(data_dir=tmp_path, env={}), SUBJECT)
+    assert reader.call_count == 1
+
+
 def test_empty_subject_is_not_completed(tmp_path):
     browser, _ = setup_browser()
     with patch('wangda.adapter.read_subject', side_effect=Unconfirmed('No visible curriculum')):

@@ -197,6 +197,27 @@ def course_url(course_id, subject_id):
     return f"{HOST}/#/study/course/detail/subject-course/{course_id}/6/{subject_id}"
 
 CREDIT_WAIT_S = 600
+COUNTER_ABSENT_WAIT_S = 90
+
+
+class CourseResult:
+    """run_course 的结果：bool 仍表示是否确认完成，reason 说明未确认的具体原因。
+
+    节次全部显示已完成、但该版课程页没有「完成 x 节 / 共 y 节」计数时，页面本身无法自证，
+    交给调用方用专题卡片（服务端真值）复核，而不是空等满 CREDIT_WAIT_S。
+    """
+
+    __slots__ = ('ok', 'reason')
+
+    def __init__(self, ok, reason=None):
+        self.ok = ok
+        self.reason = reason
+
+    def __bool__(self):
+        return self.ok
+
+    def __repr__(self):
+        return f'CourseResult({self.ok}, {self.reason!r})'
 
 TOTAL_RE = re.compile(r"课程总时长\s*(?:(\d+)\s*小时)?\s*(?:(\d+)\s*分钟)?")
 
@@ -445,6 +466,7 @@ def run_course(p, course_id, subject_id, rate, logpath, stall_limit=6):
     credit_checked = False
     confirm_at = None
     mismatch = 0
+    seen_all_done = False
     last_reload_at = time.time()
     recoveries = 0
     while True:
@@ -476,6 +498,9 @@ def run_course(p, course_id, subject_id, rate, logpath, stall_limit=6):
             log(logpath, ev="error_page_stop", course=course_id, href=href[:90])
             return False
         if st.get("cid") != course_id:
+            if seen_all_done:      # 整课节次已完成、平台自动切到下一门课：不重进、不从头重播
+                log(logpath, ev="course_page_advanced", course=course_id, cid=st.get("cid"))
+                return CourseResult(False, "page_advanced")
             mismatch += 1
             log(logpath, ev="course_mismatch", course=course_id, cid=st.get("cid"))
             if mismatch >= 3:
@@ -500,14 +525,21 @@ def run_course(p, course_id, subject_id, rate, logpath, stall_limit=6):
         m = re.match(r"完成\s*(\d+)\s*节\s*/\s*共\s*(\d+)\s*节", prog)
         page_full = bool(m and m.group(2) != "0" and m.group(1) == m.group(2))
         complete = bool(st.get("allDone")) and (st.get("cnt") or 0) > 0
+        if complete:
+            seen_all_done = True
         if complete and page_full:
             log(logpath, ev="course_done", course=course_id, prog=prog, credited=True, rate=rate_now)
             return True
         if complete:
             confirm_at = confirm_at or time.time()
-            if time.time() - confirm_at > CREDIT_WAIT_S:
-                log(logpath, ev="course_unconfirmed", course=course_id, prog=prog, credited=False)
-                return False
+            # 计数存在但没到 x/x 时按原口径等满；整版没有该计数（新页面版式）只短暂停留，
+            # 由调用方用专题卡片复核，避免空转 10 分钟再整课重播。
+            wait = CREDIT_WAIT_S if prog else COUNTER_ABSENT_WAIT_S
+            if time.time() - confirm_at > wait:
+                reason = "counter_incomplete" if prog else "counter_absent"
+                log(logpath, ev="course_unconfirmed", course=course_id, prog=prog, credited=False,
+                    reason=reason)
+                return CourseResult(False, reason)
         else:
             confirm_at = None
             # 首节播完（进入第 2 节）后 2 分钟查一次学时（只记录；页面计数器刷新有延迟，

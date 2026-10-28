@@ -258,6 +258,16 @@ def confirm_subject(page, config, url, course_ids=None):
         time.sleep(min(10, config.poll_seconds * 10, remaining))
 
 
+CARD_RESCUE_REASONS = ('counter_absent', 'page_advanced')
+
+
+def course_card_done(page, subject_url, course_id):
+    """课程页无法自证时，用专题卡片（服务端真值）复核这一门课是否已完成。"""
+    data = read_subject(page, subject_url)
+    engine.log(None, ev='subject', **data)
+    return {item['id']: item['st'] for item in data['items']}.get(course_id) == '已完成'
+
+
 def play(browser, config, url):
     validate_url(url)
     page = None
@@ -265,11 +275,16 @@ def play(browser, config, url):
         page = prepare(browser, config)
         subject, course = engine.parse_url(url)
         if course:
-            if not engine.run_course(page, course, subject, config.rate, None):
+            subject_url = f'{engine.HOST}/#/study/subject/detail/{subject}'
+            result = engine.run_course(page, course, subject, config.rate, None)
+            if not result:
                 if engine.is_login_wall(page):
                     raise LoginRequired()
-                raise Unconfirmed('Course directory/counter did not confirm completion')
-            subject_url = f'{engine.HOST}/#/study/subject/detail/{subject}'
+                rescued = getattr(result, 'reason', None) in CARD_RESCUE_REASONS and \
+                    course_card_done(page, subject_url, course)
+                if not rescued:
+                    raise Unconfirmed('Course directory/counter did not confirm completion')
+                engine.log(None, ev='course_card_rescue', course=course)
             confirm_subject(page, config, subject_url, course_ids=(course,))
             return {'verified': True, 'course': course, 'subject': subject,
                     'confirmation': 'course_and_subject', 'card_status': '已完成'}
@@ -281,9 +296,14 @@ def play(browser, config, url):
         failures = []
         for item in ordered:
             if item.get('type') == '10':
-                if not engine.run_course(page, item['id'], subject, config.rate, None):
+                result = engine.run_course(page, item['id'], subject, config.rate, None)
+                if not result:
                     if engine.is_login_wall(page):
                         raise LoginRequired()
+                    if getattr(result, 'reason', None) in CARD_RESCUE_REASONS and \
+                            course_card_done(page, url, item['id']):
+                        engine.log(None, ev='course_card_rescue', course=item['id'])
+                        continue
                     if config.continue_on_error:
                         failures.append(item['id'])
                         engine.log(None, ev='course_skipped', course=item['id'], reason='unconfirmed')
