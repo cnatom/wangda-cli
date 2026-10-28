@@ -69,7 +69,7 @@ wanda auth --username '<工号或手机号>' --json               # 发短信后
 printf '%s\n' '<验证码>' | wanda auth --username '<...>' --code-stdin --json
 ```
 
-验证码只在本地终端读取，不写日志、不进快照；`session.json` 里是 token，不要粘贴、上传或提交。`auth` 只负责认证，课程仍由浏览器真实播放。
+验证码只在本地终端读取，不写日志、不进快照；`session.json` 里是 token，不要粘贴、上传或提交。`auth` 只负责认证，课程仍由浏览器真实播放：`inspect`/`run` 打开页面前会把这个 token 注入专用 profile 的 `localStorage["token"]`，所以登录成功后不需要再开浏览器窗口。token 有效期约 4 小时（`expires_in` 14400），`doctor` 报 `session.fresh: false` 时重跑 `auth`。
 
 平台前置 WAF 会拦境外数据中心出口：实测美国 VPS 访问首页直接返回「安全卫士应用防护平台」405 或连接中断。远程长跑要用国内出口（家宽或国内 VPS），不要用境外云主机。
 

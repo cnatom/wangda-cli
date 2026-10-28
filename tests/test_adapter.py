@@ -1,10 +1,11 @@
 import os
+import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
-from wangda import engine
+from wangda import auth, engine
 from wangda.adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, UnsupportedItem,
-                            claim_certificate, download_certificate, download_snapshot, play,
+                            claim_certificate, download_certificate, download_snapshot, install_session, play,
                             read_certificate_page, validate_url, wait_for_download)
 from wangda.config import load_config
 
@@ -30,6 +31,34 @@ def setup_browser():
     page = browser.page.return_value
     page.js.return_value = 'ready'
     return browser, page
+
+
+def _session(tmp_path, **overrides):
+    value = {'origin': engine.HOST, 'username': 'demo', 'access_token': 'tok-1', 'token_type': 'Bearer',
+             'expires_in': 3600, 'obtained_at': int(time.time())}
+    value.update(overrides)
+    return auth.write_private_json(tmp_path / auth.SESSION_FILE, value)
+
+
+def test_install_session_writes_the_web_app_localstorage_entry(tmp_path):
+    _, page = setup_browser()
+    _session(tmp_path)
+    session = install_session(page, load_config(data_dir=tmp_path, env={}))
+    assert session['access_token'] == 'tok-1'
+    page.goto.assert_called_once_with(engine.HOST + '/', wait=6)
+    expression = page.js.call_args[0][0]
+    assert expression.startswith("localStorage.setItem('token', ")
+    assert 'tok-1' in expression and 'is_weak_pwd' in expression and 'Bearer' in expression
+
+
+def test_install_session_skips_a_missing_or_expired_session(tmp_path):
+    _, page = setup_browser()
+    config = load_config(data_dir=tmp_path, env={})
+    assert install_session(page, config) is None
+    page.goto.assert_not_called()
+    _session(tmp_path, obtained_at=0)
+    assert install_session(page, config) is None
+    page.goto.assert_not_called()
 
 
 def test_failed_course_is_not_reported_success(tmp_path):

@@ -1,10 +1,11 @@
 """Platform orchestration. Only visible page state can confirm completion."""
+import json
 import re
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import engine
+from . import auth, engine
 
 
 class LoginRequired(Exception):
@@ -49,7 +50,20 @@ def prepare(browser, config):
     browser.open(headed=config.headed)
     page = browser.page()
     page.call('Page.addScriptToEvaluateOnNewDocument', source=engine.DEVTOOL_GUARD)
+    install_session(page, config)
     return page
+
+
+def install_session(page, config):
+    """Adopt a `wanda auth` token: the web app stores exactly this localStorage entry."""
+    session = auth.read_session(config.data_dir / auth.SESSION_FILE)
+    if not session or not auth.is_fresh(session):
+        return None
+    page.goto(engine.HOST + '/', wait=6)
+    token = json.dumps({'access_token': session['access_token'],
+                        'token_type': session['token_type'], 'is_weak_pwd': 'false'})
+    page.js(f"localStorage.setItem('token', {json.dumps(token)})")
+    return session
 
 
 def read_subject(page, url, wait=45):
@@ -94,7 +108,6 @@ def inspect(browser, config, url):
                 if engine.is_login_wall(page):
                     raise LoginRequired()
                 raise Unconfirmed('No visible course directory')
-            import json
             return json.loads(page.js(engine.SECTION_STATE))
         return read_subject(page, url)
     finally:
