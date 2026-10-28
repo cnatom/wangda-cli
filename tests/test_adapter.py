@@ -339,7 +339,7 @@ def test_download_certificate_rejects_a_file_path(tmp_path):
 
 def test_course_run_accepts_a_statusless_subject_layout(tmp_path):
     browser, _ = setup_browser()
-    cards = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '', 'opt': False}]}
+    cards = {'progress': '', 'hasStatus': False, 'items': [{'id': 'c1', 'type': '10', 'st': '', 'opt': False}]}
     config = load_config(data_dir=tmp_path, env={})
     with patch.object(engine, 'run_course', return_value=True), \
             patch('wangda.adapter.confirm_subject', side_effect=Unconfirmed('cards not ready')), \
@@ -352,7 +352,7 @@ def test_course_run_accepts_a_statusless_subject_layout(tmp_path):
 
 def test_course_run_still_fails_when_the_subject_page_shows_statuses(tmp_path):
     browser, _ = setup_browser()
-    cards = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '学习中', 'opt': False}]}
+    cards = {'progress': '', 'hasStatus': True, 'items': [{'id': 'c1', 'type': '10', 'st': '学习中', 'opt': False}]}
     config = load_config(data_dir=tmp_path, env={})
     with patch.object(engine, 'run_course', return_value=True), \
             patch('wangda.adapter.confirm_subject', side_effect=Unconfirmed('cards not ready')), \
@@ -364,7 +364,7 @@ def test_course_run_still_fails_when_the_subject_page_shows_statuses(tmp_path):
 
 def test_statusless_layout_skips_the_confirmation_window(tmp_path):
     browser, _ = setup_browser()
-    cards = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '', 'opt': False}]}
+    cards = {'progress': '', 'hasStatus': False, 'items': [{'id': 'c1', 'type': '10', 'st': '', 'opt': False}]}
     with patch.object(engine, 'run_course', return_value=True), \
             patch('wangda.adapter.confirm_subject') as confirm, \
             patch('wangda.adapter.read_subject', return_value=cards), \
