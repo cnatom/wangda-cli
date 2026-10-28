@@ -83,6 +83,9 @@ def parser():
             sub.add_argument('--headed', action=argparse.BooleanOptionalAction, default=None)
             sub.add_argument('--retries', type=int, default=None)
             sub.add_argument('--continue-on-error', action=argparse.BooleanOptionalAction, default=None)
+            sub.add_argument('--watch', action=argparse.BooleanOptionalAction, default=None,
+                             help='Keep re-checking and re-running until every entry is confirmed complete')
+            sub.add_argument('--watch-interval', type=float, default=None)
             sub.add_argument('--background', action='store_true')
         if name in ('pause', 'stop'):
             sub.add_argument('--timeout', type=float, default=15)
@@ -150,7 +153,8 @@ def main(argv=None):
     args = parser().parse_args(argv)
     values = vars(args)
     overrides = {key: values.get(key) for key in ('data_dir', 'profile', 'browser', 'port', 'rate',
-                                                  'headed', 'retries', 'continue_on_error')}
+                                                  'headed', 'retries', 'continue_on_error',
+                                                  'watch', 'watch_interval')}
     old_sink = engine.EVENT_SINK
     engine.EVENT_SINK = lambda event: print(json.dumps(scrub(event), ensure_ascii=False), file=sys.stderr, flush=True)
     try:
@@ -175,7 +179,11 @@ def main(argv=None):
                             ('websocket-client', 'platformdirs', 'psutil', 'filelock', 'cryptography')}
             try:
                 saved = auth.read_session(config.data_dir / auth.SESSION_FILE)
-                session = {'present': bool(saved), 'fresh': bool(saved and auth.is_fresh(saved))}
+                remaining = None
+                if saved and isinstance(saved.get('expires_in'), (int, float)) and saved.get('obtained_at'):
+                    remaining = int(saved['obtained_at'] + saved['expires_in'] - time.time())
+                session = {'present': bool(saved), 'fresh': bool(saved and auth.is_fresh(saved)),
+                           'expires_in_remaining': remaining}
             except auth.AuthError:
                 session = {'present': True, 'fresh': False, 'detail': 'session file permissions are too open'}
             emit({'status': 'ready' if browser_path else 'missing_browser', 'version': __version__,

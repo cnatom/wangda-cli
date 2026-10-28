@@ -13,6 +13,7 @@ import uuid
 
 import psutil
 
+from . import auth
 from .adapter import validate_url
 from .browser import Browser
 from .config import load_config
@@ -156,7 +157,105 @@ class Runner:
             self.stop_child()
             reader.join(timeout=2)
 
-    def run(self, urls=None, resume=False, run_id=None):
+    def session_token(self):
+        """Current `wanda auth` token, if any. Cookie-only sessions return None and are not watched."""
+        try:
+            session = auth.read_session(self.config.data_dir / auth.SESSION_FILE)
+        except auth.AuthError:
+            return None
+        return session.get('access_token') if session else None
+
+    def session_usable(self):
+        if self.session_token() is None:
+            return True
+        try:
+            session = auth.read_session(self.config.data_dir / auth.SESSION_FILE)
+        except auth.AuthError:
+            return True
+        return bool(session and auth.is_fresh(session))
+
+    def wait_for_session(self):
+        """Block until `wanda auth` writes a different token, or the wait budget runs out."""
+        baseline = self.session_token()
+        if baseline is None:
+            return False
+        deadline = time.monotonic() + self.config.session_wait_seconds
+        self.state['reason'] = 'session_expired_waiting_for_auth'
+        self.save()
+        while time.monotonic() < deadline:
+            action = self.store.command(self.state['run_id'])
+            if action:
+                self.state['control'] = action
+                return False
+            token = self.session_token()
+            if token and token != baseline:
+                self.state.pop('reason', None)
+                return True
+            time.sleep(self.config.poll_seconds)
+        return False
+
+    def watch_pause(self):
+        """Sleep between watch passes, but honour pause/stop immediately."""
+        deadline = time.monotonic() + self.config.watch_interval
+        while time.monotonic() < deadline:
+            action = self.store.command(self.state['run_id'])
+            if action:
+                self.state['control'] = action
+                return False
+            time.sleep(min(self.config.poll_seconds, max(0, deadline - time.monotonic())))
+        return True
+
+    def pass_over(self, items, log_handle):
+        """One sequential pass. Returns a status string instead of finishing."""
+        saw_failed = False
+        saw_unconfirmed = False
+        for index, item in enumerate(items):
+            self.state['index'] = index
+            if item['status'] == 'completed':
+                continue
+            if not self.session_usable():
+                self.state['needs_auth'] = True
+                return 'waiting_login'
+            self.state.pop('progress', None)
+            for attempt in range(self.config.retries + 1):
+                item['attempts'] += 1
+                item['status'] = 'running'
+                self.save()
+                status = self.attempt(item, log_handle)
+                item['status'] = status
+                self.save()
+                if status == 'completed':
+                    break
+                if status in ('paused', 'stopped'):
+                    return status
+                if status == 'waiting_login':
+                    self.state['needs_auth'] = True
+                    return 'waiting_login'
+                if status == 'failed' and attempt < self.config.retries:
+                    end = time.monotonic() + min(30, self.retry_delay * 2 ** attempt)
+                    while time.monotonic() < end:
+                        action = self.store.command(self.state['run_id'])
+                        if action:
+                            self.state['control'] = action
+                            return 'paused' if action == 'pause' else 'stopped'
+                        time.sleep(min(self.config.poll_seconds, max(0, end - time.monotonic())))
+                    continue
+                if not self.config.continue_on_error:
+                    return status
+                if status == 'failed':
+                    saw_failed = True
+                elif status == 'unconfirmed':
+                    saw_unconfirmed = True
+                break
+        self.state['index'] = len(items)
+        if saw_failed:
+            return 'failed'
+        if saw_unconfirmed:
+            return 'unconfirmed'
+        return 'completed'
+
+    def run(self, urls=None, resume=False, run_id=None, watch=None):
+        watch = self.config.watch if watch is None else watch
         with exclusive(self.config):
             previous = self.store.read()
             if resume:
@@ -191,45 +290,33 @@ class Runner:
                     old_handlers[sig] = signal.signal(sig, interrupted)
             try:
                 with (log_dir / f"events-{self.state['run_id']}.jsonl").open('a', encoding='utf-8') as log_handle:
-                    saw_failed = False
-                    saw_unconfirmed = False
-                    for index, item in enumerate(items):
-                        self.state['index'] = index
-                        if item['status'] == 'completed':
-                            continue
-                        self.state.pop('progress', None)
-                        for attempt in range(self.config.retries + 1):
-                            item['attempts'] += 1
-                            item['status'] = 'running'
-                            self.save()
-                            status = self.attempt(item, log_handle)
-                            item['status'] = status
-                            self.save()
-                            if status == 'completed':
-                                break
-                            if status in ('paused', 'stopped', 'waiting_login'):
-                                return self.finish(status)
-                            if status == 'failed' and attempt < self.config.retries:
-                                end = time.monotonic() + min(30, self.retry_delay * 2 ** attempt)
-                                while time.monotonic() < end:
-                                    action = self.store.command(self.state['run_id'])
-                                    if action:
-                                        return self.finish('paused' if action == 'pause' else 'stopped')
-                                    time.sleep(min(self.config.poll_seconds, max(0, end - time.monotonic())))
+                    passes = 0
+                    while True:
+                        passes += 1
+                        self.state['pass'] = passes
+                        self.save()
+                        status = self.pass_over(items, log_handle)
+                        if status in ('paused', 'stopped'):
+                            return self.finish(status)
+                        if not watch:
+                            return self.finish(status)
+                        if status == 'completed':
+                            return self.finish('completed')
+                        if status == 'waiting_login':
+                            # Bounded wait for a fresh `wanda auth` token; nothing else can proceed.
+                            if self.wait_for_session():
                                 continue
-                            if not self.config.continue_on_error:
-                                return self.finish(status)
-                            if status == 'failed':
-                                saw_failed = True
-                            elif status == 'unconfirmed':
-                                saw_unconfirmed = True
-                            break
-                    self.state['index'] = len(items)
-                    if saw_failed:
-                        return self.finish('failed')
-                    if saw_unconfirmed:
-                        return self.finish('unconfirmed')
-                    return self.finish('completed')
+                            control = self.state.pop('control', None)
+                            return self.finish('paused' if control == 'pause'
+                                               else 'stopped' if control else 'waiting_login')
+                        if passes >= self.config.watch_max_passes:
+                            return self.finish(status)
+                        if not self.watch_pause():
+                            return self.finish('paused' if self.state.get('control') == 'pause' else 'stopped')
+                        for item in items:
+                            if item['status'] != 'completed':
+                                item['status'] = 'pending'
+                                item['attempts'] = 0
             except KeyboardInterrupt:
                 return self.finish('stopped')
             except Exception as error:

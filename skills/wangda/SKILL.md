@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. `wanda auth` needs no display; only the fallback browser login does.
 metadata:
   author: cnatom
-  version: "0.5.1"
+  version: "0.6.0"
 ---
 
 # Wangda real playback
@@ -28,7 +28,7 @@ Use this skill when the user gives China Mobile Wangda course/subject links and 
 
 ## Login and profile reuse
 
-`wanda auth` is the default path: it runs the same SMS login over HTTP, writes `<data-dir>/session.json` (0600), and `inspect`/`run` inject that token into the dedicated browser's `localStorage["token"]` before navigating. No window, no profile lock, works on a headless remote host. The token lives about four hours (`expires_in` 14400); re-run `auth` when `doctor` reports `session.fresh: false`.
+`wanda auth` is the default path: it runs the same SMS login over HTTP, writes `<data-dir>/session.json` (0600), and `inspect`/`run` inject that token into the dedicated browser's `localStorage["token"]` before navigating. No window, no profile lock, works on a headless remote host. The token lives about four hours (`expires_in` 14400) and the platform uses the implicit grant with **no refresh token**, so it cannot be renewed silently — re-run `auth` when `doctor` reports `session.fresh: false` or `expires_in_remaining` under ~300. In `--watch` mode an expired token does not fail the queue: the run parks at `waiting_login` with `reason=session_expired_waiting_for_auth`, waits up to `session_wait_seconds` for a newly written token, then continues the same queue.
 
 ```sh
 wanda auth --probe --json                                   # read-only: public key + sign, no SMS
@@ -67,7 +67,7 @@ wanda inspect 'https://wangda.chinamobile.com/#/study/subject/detail/EXAMPLE_TOP
 wanda certificate '<subject-or-course-URL>' --json
 wanda certificate '<subject-or-course-URL>' --download '<local-directory>' --json
 wanda run '<subject-or-course-URL>' --rate 1.5 --background --json
-wanda run '<URL-A>' '<URL-B>' --background --json
+wanda run '<URL-A>' '<URL-B>' --watch --background --json
 wanda status --json
 wanda logs --tail 10 --json
 wanda pause --json

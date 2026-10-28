@@ -176,3 +176,79 @@ def test_continue_on_error_still_stops_for_login(tmp_path):
     state = Store(tmp_path).read()
     assert state['status'] == 'waiting_login'
 
+
+
+def test_watch_keeps_retrying_until_every_entry_is_complete(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, retries=0, watch=True,
+                      watch_interval=0.01, watch_max_passes=3, env={})
+    calls = []
+
+    def worker(config, url):
+        calls.append(url)
+        status = 'unconfirmed' if len(calls) == 1 else 'completed'
+        verified = 'True' if status == 'completed' else 'False'
+        return command(f'import json; print(json.dumps({{"ev":"result","status":"{status}","verified":{verified}}}))')
+
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A]) == 0
+    state = Store(tmp_path).read()
+    assert state['status'] == 'completed'
+    assert [item['status'] for item in state['queue']] == ['completed']
+    assert calls == [URL_A, URL_A]
+    assert state['pass'] == 2
+
+
+def test_watch_is_bounded_by_max_passes(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, retries=0, watch=True,
+                      watch_interval=0.01, watch_max_passes=2, env={})
+    calls = []
+
+    def worker(config, url):
+        calls.append(url)
+        return command('import json; print(json.dumps({"ev":"result","status":"unconfirmed","verified":False}))')
+
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A]) == 4
+    assert Store(tmp_path).read()['status'] == 'unconfirmed'
+    assert len(calls) == 2
+
+
+def test_watch_waits_for_a_new_token_instead_of_finishing(tmp_path):
+    import threading
+    from wangda import auth
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.05, retries=0, watch=True,
+                      watch_interval=0.01, watch_max_passes=3, session_wait_seconds=5, env={})
+
+    def session(token, obtained_at):
+        auth.write_private_json(tmp_path / auth.SESSION_FILE,
+                                {'access_token': token, 'token_type': 'Bearer',
+                                 'expires_in': 3600, 'obtained_at': obtained_at})
+
+    session('old-token', 0)   # expired: the pass must stop before the worker runs
+
+    def reauth():
+        import time as _time
+        _time.sleep(0.3)
+        session('new-token', int(_time.time()))
+
+    calls = []
+
+    def worker(config, url):
+        calls.append(url)
+        return command('import json; print(json.dumps({"ev":"result","status":"completed","verified":True}))')
+
+    threading.Thread(target=reauth, daemon=True).start()
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A]) == 0
+    assert calls == [URL_A]
+    assert Store(tmp_path).read()['status'] == 'completed'
+
+
+def test_watch_without_a_session_file_does_not_hang_on_login_wall(tmp_path):
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, retries=0, watch=True,
+                      watch_interval=0.01, session_wait_seconds=5, env={})
+    calls = []
+
+    def worker(config, url):
+        calls.append(url)
+        return command('import json; print(json.dumps({"ev":"result","status":"waiting_login"}))')
+
+    assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A]) == 3
+    assert len(calls) == 1

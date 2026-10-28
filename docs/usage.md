@@ -32,6 +32,10 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 `run` 新建队列，多个链接顺序执行。`resume` 保留队列并跳过已确认完成的链接。课程续播位置由平台保存的进度决定。
 
+`--watch` 让队列常驻：一轮跑完后不退出，把还没确认完成的链接重新排队，`--watch-interval`（默认 1800 秒）后再复查，最多 `watch_max_passes`（默认 6）轮，超了按最后一轮状态收尾。配合 `--background` 和一台国内常开的机器，就是无人值守模式；`status`/`pause`/`stop` 行为不变。
+
+`wanda auth` 的 token 有效期约 4 小时，且平台用的是 implicit 授权、**没有 refresh_token**，无法静默续期。watch 模式在 token 过期时不会判失败：它会把状态置为 `waiting_login`（`reason=session_expired_waiting_for_auth`）并原地等待，你在任意时刻重跑一次 `wanda auth` 写入新 token，队列随后自动继续，不需要重新排队或重启。等待上限由 `session_wait_seconds`（默认 6 小时）控制。
+
 `certificate` 只点击平台已经显示的「领取证书」，领取后刷新页面确认服务端状态。`already_claimed` 表示此前已领取；`not_eligible` 表示条件未满足；`no_certificate` 表示该专题没有证书入口，三者都不会被绕过。`--download DIR` 会在领取后打开证书弹窗并把 PNG 保存到指定目录；默认不下载。刚完成手动登录时加 `--headed` 可复用当前可见窗口。证书含姓名和证书编号，只保存在本地，不要上传或粘贴到聊天、日志和 issue。
 
 后台启动返回启动确认，最终结果以 `status` 为准；不加 `--background` 则前台运行。查询状态和日志不会打开或导航浏览器。运行期间不要执行 `inspect` 或 `certificate`。
