@@ -130,6 +130,8 @@ SUBJECT_ITEMS = r"""
   const seen = new Set();
   return JSON.stringify({
     progress: (document.body.innerText.match(/完成\s*\d+\s*项\s*\/\s*共\s*\d+\s*项/) || [''])[0],
+    // 布局判别：状态元素是否存在（而不是当前文本为空），延迟刷新与无状态布局必须区分
+    hasStatus: document.querySelectorAll('.study-status').length > 0,
     items: out.filter(o => !seen.has(o.id) && seen.add(o.id))
   });
 })()

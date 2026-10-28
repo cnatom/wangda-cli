@@ -255,17 +255,16 @@ def claim_certificate(browser, config, url, download_dir=None):
         browser.close()
 
 
-def confirm_subject(page, config, url, course_ids=None):
+def confirm_subject(page, config, url, course_ids=None, first=None):
     """Confirm exact cards, not just a course counter or an aggregate increase."""
     page.js(engine.STOP_PLAYBACK)
     deadline = time.monotonic() + config.confirmation_seconds
-    first_read = True
+    data = first
     while True:
-        if not first_read:
+        if data is None:
             # Assigning the same SPA hash does not refresh server-backed card state.
             page.call('Page.reload', ignoreCache=True)
-        data = read_subject(page, url)
-        first_read = False
+            data = read_subject(page, url)
         engine.log(None, ev='subject', **data)
         if course_ids is None:
             pending = engine.required_items(data['items'])
@@ -279,20 +278,19 @@ def confirm_subject(page, config, url, course_ids=None):
             raise Unconfirmed('Requested items remain unconfirmed on the subject page')
         engine.log(None, ev='confirm_wait')
         time.sleep(min(10, config.poll_seconds * 10, remaining))
+        data = None
 
 
-def confirm_subject_layout_fallback(page, subject_url):
-    """Only for subject pages that render no per-card status at all.
+def statusless_layout(data):
+    """True only when the subject page renders no status element at all (专区 布局).
 
-    Returns the subject snapshot when every card's status is empty (the 专区 layout),
-    and None when statuses exist — a missing 已完成 is then a real signal, so the caller
-    must keep reporting unconfirmed.
+    An empty status text on a page that *does* render `.study-status` is just a delayed
+    refresh, so it must keep going through the normal confirmation loop.
     """
-    data = read_subject(page, subject_url)
-    items = data.get('items') or []
-    if not items or any((item.get('st') or '').strip() for item in items):
-        return None
-    return data
+    items = (data or {}).get('items') or []
+    if not items or (data or {}).get('hasStatus') is not False:
+        return False
+    return not any((item.get('st') or '').strip() for item in items)
 
 
 def play(browser, config, url):
@@ -307,18 +305,14 @@ def play(browser, config, url):
                     raise LoginRequired()
                 raise Unconfirmed('Course directory/counter did not confirm completion')
             subject_url = f'{engine.HOST}/#/study/subject/detail/{subject}'
-            try:
-                confirm_subject(page, config, subject_url, course_ids=(course,))
-                confirmation = 'course_and_subject'
-                card_status = '已完成'
-            except Unconfirmed:
-                # 专区式专题页没有任何状态元素（st 全为空）：此时课程页自身的计数器/逐节状态
-                # 已是可验证的真值，不因为卡片不渲染状态就把整门课判失败。
-                data = confirm_subject_layout_fallback(page, subject_url)
-                if data is None:
-                    raise
-                confirmation = 'course_page'
-                card_status = ''
+            # Read the subject page once and reuse it: a statusless layout is confirmed from the
+            # course page directly, which avoids burning the confirmation window on every course.
+            data = read_subject(page, subject_url)
+            if statusless_layout(data):
+                confirmation, card_status = 'course_page', ''
+            else:
+                confirm_subject(page, config, subject_url, course_ids=(course,), first=data)
+                confirmation, card_status = 'course_and_subject', '已完成'
             return {'verified': True, 'course': course, 'subject': subject,
                     'confirmation': confirmation, 'card_status': card_status}
         data = read_subject(page, url)

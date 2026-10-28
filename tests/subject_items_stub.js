@@ -38,7 +38,11 @@ card({id: 'zone-1', type: '10', action: '开始学习', body: '视频来源于�
 card({id: 'opt-1', type: '10', status: '未开始', optional: true, body: '选修课程 未开始'});
 
 global.document = {
-  querySelectorAll: sel => (sel === 'a[data-resource-id]' ? nodes : []),
+  querySelectorAll: sel => {
+    if (sel === 'a[data-resource-id]') return nodes;
+    if (sel === '.study-status') return [node({innerText: '已完成'})];   // 标准卡片才有状态元素
+    return [];
+  },
   body: {innerText: '完成 1 项 / 共 3 项'},
 };
 
