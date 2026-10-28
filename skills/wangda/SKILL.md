@@ -70,6 +70,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 ## Boundaries and pitfalls
 
 - No forged reports, learning-time edits, direct completion-report API calls, account-limit bypass, or parallel sessions for one account.
+- One account admits one active course page. If another session holds a course page (for example the same account playing on a second machine), opening the course here shows 「您已打开新的课程详情页」 and the duplicate tab is blanked to `about:blank`; the queue then ends with `error_page_stop`/`unconfirmed`. Treat it as a concurrency conflict, not a course failure: stop, have the user end the other session, then resume.
 - Never claim a certificate the platform has not visibly offered, and never modify certificate eligibility or generate a substitute certificate.
 - Playback is muted at the browser level (`--mute-audio`) and the player volume is set to 0. Do not unmute it or add audio.
 - Background runner and worker processes must not open a visible terminal window. If one appears, stop the queue and restart with the current version.
@@ -79,6 +80,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
 - Course and subject progress can disagree temporarily. The CLI refreshes card state within the configured confirmation window; expiry means `unconfirmed`, not permission to replay indefinitely or manufacture a result.
 - Login needs a visible browser/display. A remote headless-only host must use a secure graphical session for authentication; do not export cookies into chat.
+- The OAuth login page runs a devtools detector: a tab whose CDP session is attached is blanked to `about:blank` when the user requests an SMS code, so a `--remote-debugging-port` window cannot finish an SMS login. To authenticate, open the same dedicated profile in a plain Chrome window without that flag, have the user log in there, close it, then run `inspect` or `run` and let the CLI attach. Playback pages are unaffected.
 - Logs and profiles are private local data. Do not upload them or paste raw page/network state into issues.
 
 ## Verification and output

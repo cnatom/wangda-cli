@@ -40,6 +40,23 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 有意保持窗口，供本人登录；结束后可用 `stop` 关闭。机器重启后需显式恢复任务。
 
+## 登录
+
+登录页（`/oauth/`）内嵌 devtools 检测：只要标签页带着已连接的调试会话，点「获取验证码」后页面会自己跳到 `about:blank`，控制台留下 `You don't have permission to use DEVTOOL!【type = 6】`。因此带 `--remote-debugging-port` 的窗口无法完成短信登录，`wanda login` 打开的那一页只能用来确认登录墙位置。
+
+需要本人登录时，用同一 profile 打开一个不带调试端口的普通浏览器窗口，登录完成后关闭它，再让 CLI 接管：
+
+```sh
+# 关闭自动化浏览器，保持 profile 与登录态
+wanda stop --json
+# 用同一 profile 打开登录页，此窗口不带 --remote-debugging-port
+open -na "Google Chrome" --args --user-data-dir="$PROFILE" https://wangda.chinamobile.com/
+# 本人完成登录并关闭该窗口后，验证登录态
+wanda inspect '<课程或专题链接>' --json
+```
+
+登录完成后不要再用 `wanda login` 打开调试端口窗口，也不要导出 cookie；直接 `inspect`/`run`，CLI 会在需要时自己附加调试会话。视频播放页不受该检测影响。
+
 ## 配置
 
 优先级：CLI > `WANDA_*` 环境变量 > TOML > 默认值。`resume` 使用之前的配置作为低优先级基线，当前显式设置优先。示例见 [config.example.toml](../config.example.toml)。
