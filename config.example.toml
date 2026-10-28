@@ -8,6 +8,7 @@ port = 0                # 0: Chrome chooses a free loopback CDP port
 retries = 2             # task retries after process/network failure (not login/unconfirmed)
 stale_seconds = 180
 confirmation_seconds = 180
+item_dwell_seconds = 20   # 文档/图片/单项视频弹层停留秒数；只影响平台自己记账的时间，不代替完成判定
 poll_seconds = 1
 # data_dir = "./.runtime"  # Relative paths resolve against the command's working directory
 # profile = "./.runtime/profile"  # Dedicated profile ONLY; never your everyday Chrome data

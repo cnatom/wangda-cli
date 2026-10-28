@@ -40,6 +40,8 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 `--continue-on-error` 让队列在单个链接失败或 `unconfirmed` 后继续处理后续链接；同一专题内某门必修课失败时也会跳过该门并继续后续课程。登录失效、暂停和停止仍立即终止。失败项在队列中保留 `failed`/`unconfirmed`，最终整体状态仍为 `failed`/`unconfirmed`，不会把失败项算作完成。
 
+必修项类型处理：`10` 走完整课程会话；`1` 文档、`2` 图片、`6` 单项视频点击卡片后让它的查看页停留 `item_dwell_seconds`（默认 20 秒），由平台自己记账；`3` 是普通 URL 点击。`9` 考试、`14` 直播、`16` 嵌套专题不会被点击：先把其余必修项跑完，再以 `unconfirmed` 报 `Required items need manual handling: type …`。停留时间不代替完成判定，专题卡片状态没变成「已完成」就是未确认。
+
 暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 有意保持窗口，供本人登录；结束后可用 `stop` 关闭。机器重启后需显式恢复任务。
 
 ## 登录

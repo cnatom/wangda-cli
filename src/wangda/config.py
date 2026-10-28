@@ -21,6 +21,7 @@ class Config:
     stale_seconds: float = 180
     confirmation_seconds: float = 180
     poll_seconds: float = 1
+    item_dwell_seconds: float = 20
 
     def as_dict(self):
         return {k: str(v) if isinstance(v, Path) else v for k, v in asdict(self).items()}
@@ -53,7 +54,7 @@ def load_config(config_file=None, env=None, base=None, **overrides):
     for key in ('port', 'retries'):
         if key in values:
             values[key] = int(values[key])
-    for key in ('rate', 'stale_seconds', 'confirmation_seconds', 'poll_seconds'):
+    for key in ('rate', 'stale_seconds', 'confirmation_seconds', 'poll_seconds', 'item_dwell_seconds'):
         if key in values:
             values[key] = float(values[key])
     for key in ('headed', 'continue_on_error'):
@@ -66,7 +67,7 @@ def load_config(config_file=None, env=None, base=None, **overrides):
         raise ValueError('rate must be a platform-supported value: 1.0, 1.2 or 1.5')
     if not 0 <= config.port <= 65535 or not 0 <= config.retries <= 10:
         raise ValueError('port must be 0..65535 and retries must be 0..10')
-    for key in ('stale_seconds', 'confirmation_seconds', 'poll_seconds'):
+    for key in ('stale_seconds', 'confirmation_seconds', 'poll_seconds', 'item_dwell_seconds'):
         if not math.isfinite(getattr(config, key)) or getattr(config, key) <= 0:
             raise ValueError(f'{key} must be finite and positive')
     return config

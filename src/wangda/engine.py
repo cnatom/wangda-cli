@@ -339,13 +339,16 @@ def close_new_popups(before_ids):
                 pass
     return n
 
-def click_item(p, item_id, logpath, log_ev="other_item"):
-    """URL/文档类必修项：在专题页点它的按钮，平台自己的 url-progress 记完成（不进学习会话）。"""
+def click_item(p, item_id, logpath, log_ev="other_item", dwell=0):
+    """URL/文档/图片/单项视频类必修项：在专题页点它的按钮，平台自己的进度记完成（不进学习会话）。
+
+    dwell 只延长弹层停留时间，不代替平台判定：是否完成仍看专题卡片状态。
+    """
     before = {t["id"] for t in http_json("/json/list")}
     r = p.js(CLICK_ITEM.replace("%ID%", item_id))
-    time.sleep(4)
+    time.sleep(max(4, dwell))
     n = close_new_popups(before)
-    log(logpath, ev=log_ev, id=item_id, click=r, popups_closed=n)
+    log(logpath, ev=log_ev, id=item_id, click=r, popups_closed=n, dwell=dwell)
     return r
 
 def reattach(p, want=None):

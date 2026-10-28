@@ -4,8 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 from wangda import auth, engine
-from wangda.adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, UnsupportedItem,
-                            claim_certificate, download_certificate, download_snapshot, install_session, play,
+from wangda.adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, claim_certificate, download_certificate, download_snapshot, install_session, play,
                             read_certificate_page, validate_url, wait_for_download)
 from wangda.config import load_config
 
@@ -89,9 +88,38 @@ def test_unknown_item_type_is_not_clicked(tmp_path):
     browser, _ = setup_browser()
     data = {'progress': '完成 0 项 / 共 1 项', 'items': [{'id': 'a', 'type': '99', 'st': '未开始'}]}
     with patch('wangda.adapter.read_subject', return_value=data), patch.object(engine, 'click_item') as click:
-        with pytest.raises(UnsupportedItem):
+        with pytest.raises(Unconfirmed, match='manual handling'):
             play(browser, load_config(data_dir=tmp_path, env={}), SUBJECT)
         click.assert_not_called()
+
+
+def test_doc_and_image_items_open_their_viewer_with_dwell(tmp_path):
+    browser, _ = setup_browser()
+    data = {'progress': '', 'items': [{'id': 'd', 'type': '1', 'st': '未开始', 'opt': False},
+                                      {'id': 'i', 'type': '2', 'st': '未开始', 'opt': False},
+                                      {'id': 'u', 'type': '3', 'st': '未开始', 'opt': False}]}
+    calls = []
+    config = load_config(data_dir=tmp_path, item_dwell_seconds=15, env={})
+    with patch('wangda.adapter.read_subject', return_value=data), \
+            patch('wangda.adapter.confirm_subject', return_value=data), \
+            patch.object(engine, 'click_item', side_effect=lambda *a, **k: calls.append((a[1], k))):
+        result = play(browser, config, SUBJECT)
+    assert result['verified'] is True
+    assert [call[0] for call in calls] == ['d', 'i', 'u']
+    assert [call[1]['dwell'] for call in calls] == [15, 15, 0]
+    assert [call[1]['log_ev'] for call in calls] == ['item_doc', 'item_image', 'item_url']
+
+
+def test_manual_item_does_not_preempt_a_video(tmp_path):
+    browser, _ = setup_browser()
+    data = {'progress': '', 'items': [{'id': 'exam', 'type': '9', 'st': '未开始', 'opt': False},
+                                      {'id': 'vid', 'type': '10', 'st': '未开始', 'opt': False}]}
+    with patch('wangda.adapter.read_subject', return_value=data), \
+            patch.object(engine, 'run_course', return_value=True) as run, \
+            patch.object(engine, 'log'):
+        with pytest.raises(Unconfirmed, match='manual handling: type 9'):
+            play(browser, load_config(data_dir=tmp_path, env={}), SUBJECT)
+    assert run.call_count == 1
 
 
 def test_subject_continues_after_failed_course_when_configured(tmp_path):

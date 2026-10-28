@@ -33,6 +33,13 @@ ID = r'[A-Za-z0-9_-]+'
 SUBJECT_PATH = re.compile(rf'/study/subject/detail/{ID}(?:/\d+)?')
 COURSE_PATH = re.compile(rf'/study/course/detail/subject-course/{ID}/6/{ID}')
 
+# Subject-card section types. 10 runs a full course session; the click types open the
+# item's own viewer so the platform records it; the rest must stay manual.
+VIDEO_ITEM = '10'
+DWELL_ITEMS = {'1': 'doc', '2': 'image', '6': 'video'}
+CLICK_ITEMS = {'3': 'url'}
+MANUAL_ITEMS = {'9': 'exam', '14': 'live', '16': 'nested_subject'}
+
 
 def validate_url(url):
     if not isinstance(url, str) or any(c.isspace() for c in url):
@@ -290,10 +297,11 @@ def play(browser, config, url):
         engine.log(None, ev='subject', **data)
         pending = engine.required_items(data['items'])
         # All video sessions finish before link clicks, which can supersede playback sessions.
-        ordered = sorted(pending, key=lambda item: item.get('type') != '10')
-        failures = []
+        ordered = sorted(pending, key=lambda item: item.get('type') != VIDEO_ITEM)
+        failures, manual = [], []
         for item in ordered:
-            if item.get('type') == '10':
+            kind = str(item.get('type') or '')
+            if kind == VIDEO_ITEM:
                 if not engine.run_course(page, item['id'], subject, config.rate, None):
                     if engine.is_login_wall(page):
                         raise LoginRequired()
@@ -302,17 +310,21 @@ def play(browser, config, url):
                         engine.log(None, ev='course_skipped', course=item['id'], reason='unconfirmed')
                         continue
                     raise Unconfirmed('A required course did not confirm completion')
-            elif item.get('type') == '3':
+            elif kind in CLICK_ITEMS or kind in DWELL_ITEMS:
                 read_subject(page, url)
-                engine.click_item(page, item['id'], None)
-            elif config.continue_on_error:
-                failures.append(item['id'])
-                engine.log(None, ev='course_skipped', course=item['id'], reason='unsupported_type')
+                engine.click_item(page, item['id'], None,
+                                  log_ev='item_' + (CLICK_ITEMS.get(kind) or DWELL_ITEMS[kind]),
+                                  dwell=config.item_dwell_seconds if kind in DWELL_ITEMS else 0)
             else:
-                raise UnsupportedItem('Unsupported required item type: manual review needed')
+                # Never guess an unknown type: finish everything actionable, then report it.
+                manual.append(kind or '?')
+                engine.log(None, ev='item_manual', id=item['id'], type=kind,
+                           label=MANUAL_ITEMS.get(kind, 'unknown'))
         if failures:
             engine.log(None, ev='subject_partial', failed=failures)
             raise Unconfirmed('Required items did not confirm completion; continue_on_error skipped them')
+        if manual:
+            raise Unconfirmed('Required items need manual handling: type ' + ', '.join(sorted(set(manual))))
         data = confirm_subject(page, config, url)
         return {'verified': True, 'subject': subject, 'progress': data['progress'], 'items': data['items']}
     finally:

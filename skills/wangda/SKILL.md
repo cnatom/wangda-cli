@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. `wanda auth` needs no display; only the fallback browser login does.
 metadata:
   author: cnatom
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # Wangda real playback
@@ -109,10 +109,10 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - `--continue-on-error` is allowed only when the user asks to ignore failures. It never turns a failed/unconfirmed item into completed.
 - `inspect` returning `{"status": "failed", "reason": "RuntimeError"}` with no `items` means the subject page produced no item list (unentitled, different layout, or blank page) — not an empty subject. Never report it as complete or as having no required items: queue it last, re-check it once the runner loads it, and report the state as still unknown.
 - Rates are restricted to 1.0, 1.2, and 1.5; availability still depends on platform/account rules.
-- Only video (type 10) and normal URL-item UI clicks (type 3) are supported. Unknown required types need manual review.
+- Required-item handling: type 10 runs a full course session; types 1 (文档), 2 (图片) and 6 (单项视频) click the card and keep its viewer open for `item_dwell_seconds` so the platform records it itself; type 3 is a plain URL click. Types 9 (考试), 14 (直播) and 16 (嵌套专题) are never clicked — the rest of the subject runs first, then the run ends `unconfirmed` with `Required items need manual handling: type …`. Dwell time never substitutes for the platform's own card state.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
 - Course and subject progress can disagree temporarily. The CLI refreshes card state within the confirmation window; expiry means `unconfirmed`, not permission to replay indefinitely or manufacture a result.
-- Login needs a visible browser/display. A remote headless-only host must use a secure graphical session for authentication; do not export cookies into chat.
+- Login needs no display with `wanda auth`; only the fallback browser flow needs a secure graphical session. Never export cookies into chat.
 - The OAuth login page runs a devtools detector: a tab with an attached CDP session is blanked to `about:blank` when the user requests an SMS code, so a `--remote-debugging-port` window can never finish an SMS login — hence the plain-window procedure in 「Login and profile reuse」. Playback pages are unaffected.
 - The platform allows one active course page per account. Opening a course while another session (the user's own browser on another machine, or a leftover tab) holds a course page renders 「您已打开新的课程详情页」 and then blanks the tab to `about:blank`; the CLI reports `error_page_stop` and the whole subject ends `unconfirmed`. Treat it as a concurrency conflict, not a course failure: clicking 继续学习 does not survive the blank, so retrying the queue cannot recover it: ask the user to close Wangda course/study tabs everywhere else, then `resume`.
 - Logs and profiles are private local data. Do not upload them or paste raw page/network state into issues.
