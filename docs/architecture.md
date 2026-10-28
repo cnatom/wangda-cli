@@ -4,7 +4,7 @@
 
 `cli -> runner/adapter -> browser/engine -> state/config`
 
-More precisely: cli handles parsing and command results; runner imports adapter only for URL validation and supervises worker processes; worker calls adapter; adapter calls engine and browser; engine uses browser.Page and an explicitly bound browser for CDP. State and config do not import platform logic. No agent SDK, daemon framework, launchd or shell script is required.
+More precisely: cli handles parsing and command results; `auth` is a standalone HTTP client used only by the `auth` command (no browser, no platform DOM); runner imports adapter only for URL validation and supervises worker processes; worker calls adapter; adapter calls engine and browser; engine uses browser.Page and an explicitly bound browser for CDP. State and config do not import platform logic. No agent SDK, daemon framework, launchd or shell script is required.
 
 ## Single authorities
 

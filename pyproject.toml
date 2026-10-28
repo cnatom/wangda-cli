@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "cnatom"}]
-dependencies = ["websocket-client>=1.8,<2", "platformdirs>=4,<5", "psutil>=6,<8", "filelock>=3.16,<4"]
+dependencies = ["websocket-client>=1.8,<2", "platformdirs>=4,<5", "psutil>=6,<8", "filelock>=3.16,<4", "cryptography>=42,<47"]
 
 [project.urls]
 Repository = "https://github.com/cnatom/wangda-cli"

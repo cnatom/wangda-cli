@@ -8,6 +8,8 @@
 
 ```sh
 wanda doctor --json
+wanda auth --probe --json
+wanda auth --username '<工号或手机号>' --json
 wanda login
 wanda inspect '<课程或专题链接>' --json
 wanda certificate '<专题或专题课程链接>' --json
@@ -56,6 +58,20 @@ wanda inspect '<课程或专题链接>' --json
 ```
 
 登录完成后不要再用 `wanda login` 打开调试端口窗口，也不要导出 cookie；直接 `inspect`/`run`，CLI 会在需要时自己附加调试会话。视频播放页不受该检测影响。
+
+### 免图形界面的协议登录（`wanda auth`）
+
+`wanda auth` 走与网页相同的短信登录链路，不需要浏览器：读 `/oauth/api/v1/setting` 拿 RSA 公钥，对 `dynamic-password-sign` 和 `members-encrypt` 使用与前端一致的 hybrid 信封（每次随机 16 位密钥，RSA 包裹成 `secureKey`，报文 AES-128-ECB 加密成 `secureData`），`auth` 换到 token 后写入 `<data-dir>/session.json`（权限 0600）。
+
+```sh
+wanda auth --probe --json                                  # 只读校验公钥与 sign 接口，不发短信
+wanda auth --username '<工号或手机号>' --json               # 发短信后在本地提示符输入验证码
+printf '%s\n' '<验证码>' | wanda auth --username '<...>' --code-stdin --json
+```
+
+验证码只在本地终端读取，不写日志、不进快照；`session.json` 里是 token，不要粘贴、上传或提交。`auth` 只负责认证，课程仍由浏览器真实播放。
+
+平台前置 WAF 会拦境外数据中心出口：实测美国 VPS 访问首页直接返回「安全卫士应用防护平台」405 或连接中断。远程长跑要用国内出口（家宽或国内 VPS），不要用境外云主机。
 
 ## 配置
 

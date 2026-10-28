@@ -13,7 +13,7 @@ import uuid
 from filelock import Timeout
 import psutil
 
-from . import __version__, engine
+from . import __version__, auth, engine
 from .adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, claim_certificate,
                       inspect, validate_url)
 from .browser import Browser, discover_browser
@@ -59,10 +59,17 @@ def parser():
     result.add_argument('--version', action='version', version=__version__)
     add_common(result)
     commands = result.add_subparsers(dest='command', required=True)
-    for name in ('doctor', 'login', 'inspect', 'certificate', 'run', 'resume', 'status', 'pause', 'stop',
+    for name in ('doctor', 'login', 'auth', 'inspect', 'certificate', 'run', 'resume', 'status', 'pause', 'stop',
                  'logs', 'skill-path'):
         sub = commands.add_parser(name)
         add_common(sub)
+        if name == 'auth':
+            sub.add_argument('--username', default=None,
+                             help='Employee id or phone number; prompted when omitted')
+            sub.add_argument('--probe', action='store_true',
+                             help='Only read the public key and sign endpoint; never sends an SMS')
+            sub.add_argument('--code-stdin', action='store_true',
+                             help='Read the SMS code from stdin instead of a no-echo prompt')
         if name == 'inspect':
             sub.add_argument('url')
         if name == 'certificate':
@@ -165,11 +172,28 @@ def main(argv=None):
             except FileNotFoundError:
                 browser_path, browser_error = None, 'Install Chrome/Chromium or set WANDA_BROWSER'
             dependencies = {name: importlib.metadata.version(name) for name in
-                            ('websocket-client', 'platformdirs', 'psutil', 'filelock')}
+                            ('websocket-client', 'platformdirs', 'psutil', 'filelock', 'cryptography')}
+            try:
+                saved = auth.read_session(config.data_dir / auth.SESSION_FILE)
+                session = {'present': bool(saved), 'fresh': bool(saved and auth.is_fresh(saved))}
+            except auth.AuthError:
+                session = {'present': True, 'fresh': False, 'detail': 'session file permissions are too open'}
             emit({'status': 'ready' if browser_path else 'missing_browser', 'version': __version__,
                   'browser': browser_path, 'detail': browser_error, 'config': config.as_dict(),
-                  'dependencies': dependencies})
+                  'session': session, 'dependencies': dependencies})
             return 0 if browser_path else 1
+        elif args.command == 'auth':
+            transport = auth.Transport(engine.HOST)
+            if args.probe:
+                emit({'status': 'ok', 'probe': auth.probe(transport)})
+                return 0
+            username = args.username or input('account (employee id or phone): ').strip()
+            ask = ((lambda phone: input(f'verification code sent to {phone}: ').strip())
+                   if args.code_stdin else auth.prompt_code)
+            session = auth.authenticate(transport, username, ask)
+            path = auth.write_private_json(config.data_dir / auth.SESSION_FILE, session)
+            emit({'status': 'ready', 'username': auth.mask_phone(username),
+                  'expires_in': session['expires_in'], 'session': str(path)})
         elif args.command == 'login':
             with exclusive(config):
                 browser = Browser(config)
@@ -241,6 +265,9 @@ def main(argv=None):
     except (ValueError, FileNotFoundError) as error:
         emit({'status': 'error', 'detail': str(error)})
         return 2
+    except auth.AuthError as error:
+        emit({'status': 'failed', 'detail': str(error)})
+        return 1
     except Exception as error:
         # Raw remote exceptions may contain authentication data.
         emit({'status': 'failed', 'reason': type(error).__name__})

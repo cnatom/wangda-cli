@@ -126,6 +126,28 @@ def test_certificate_invalid_url_returns_error_without_browser(tmp_path, capsys)
     assert json.loads(capsys.readouterr().out)['status'] == 'error'
 
 
+def test_auth_probe_is_read_only_json_and_never_sends_sms(tmp_path, capsys):
+    with patch('wangda.cli.auth.Transport') as transport:
+        transport.return_value = transport
+        with patch('wangda.cli.auth.probe', return_value={'public_key_sha256': 'abc', 'sign_present': True}):
+            assert main(['auth', '--probe', '--data-dir', str(tmp_path)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result['status'] == 'ok'
+    assert result['probe']['sign_present'] is True
+    assert not (tmp_path / 'session.json').exists()
+
+
+def test_auth_login_failure_is_reported_without_leaking_the_code(tmp_path, capsys, monkeypatch):
+    from wangda.auth import AuthError
+    monkeypatch.setattr('builtins.input', lambda prompt='': '123456')
+    with patch('wangda.cli.auth.Transport'), \
+            patch('wangda.cli.auth.authenticate', side_effect=AuthError('members-encrypt failed: errorCode 90134')):
+        assert main(['auth', '--username', '13800000000', '--code-stdin', '--data-dir', str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    assert json.loads(out)['status'] == 'failed'
+    assert '123456' not in out
+
+
 def test_runner_creationflags_hide_console_on_windows():
     if os.name != 'nt':
         return
