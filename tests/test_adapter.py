@@ -335,3 +335,28 @@ def test_download_certificate_rejects_a_file_path(tmp_path):
     target.write_bytes(b'x')
     with pytest.raises(ValueError):
         download_certificate(Mock(), target)
+
+
+def test_course_run_accepts_a_statusless_subject_layout(tmp_path):
+    browser, _ = setup_browser()
+    cards = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '', 'opt': False}]}
+    config = load_config(data_dir=tmp_path, env={})
+    with patch.object(engine, 'run_course', return_value=True), \
+            patch('wangda.adapter.confirm_subject', side_effect=Unconfirmed('cards not ready')), \
+            patch('wangda.adapter.read_subject', return_value=cards), \
+            patch.object(engine, 'log'):
+        result = play(browser, config, COURSE)
+    assert result['verified'] is True
+    assert result['confirmation'] == 'course_page'
+
+
+def test_course_run_still_fails_when_the_subject_page_shows_statuses(tmp_path):
+    browser, _ = setup_browser()
+    cards = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '学习中', 'opt': False}]}
+    config = load_config(data_dir=tmp_path, env={})
+    with patch.object(engine, 'run_course', return_value=True), \
+            patch('wangda.adapter.confirm_subject', side_effect=Unconfirmed('cards not ready')), \
+            patch('wangda.adapter.read_subject', return_value=cards), \
+            patch.object(engine, 'log'):
+        with pytest.raises(Unconfirmed):
+            play(browser, config, COURSE)

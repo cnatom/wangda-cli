@@ -281,6 +281,20 @@ def confirm_subject(page, config, url, course_ids=None):
         time.sleep(min(10, config.poll_seconds * 10, remaining))
 
 
+def confirm_subject_layout_fallback(page, subject_url):
+    """Only for subject pages that render no per-card status at all.
+
+    Returns the subject snapshot when every card's status is empty (the 专区 layout),
+    and None when statuses exist — a missing 已完成 is then a real signal, so the caller
+    must keep reporting unconfirmed.
+    """
+    data = read_subject(page, subject_url)
+    items = data.get('items') or []
+    if not items or any((item.get('st') or '').strip() for item in items):
+        return None
+    return data
+
+
 def play(browser, config, url):
     validate_url(url)
     page = None
@@ -293,9 +307,20 @@ def play(browser, config, url):
                     raise LoginRequired()
                 raise Unconfirmed('Course directory/counter did not confirm completion')
             subject_url = f'{engine.HOST}/#/study/subject/detail/{subject}'
-            confirm_subject(page, config, subject_url, course_ids=(course,))
+            try:
+                confirm_subject(page, config, subject_url, course_ids=(course,))
+                confirmation = 'course_and_subject'
+                card_status = '已完成'
+            except Unconfirmed:
+                # 专区式专题页没有任何状态元素（st 全为空）：此时课程页自身的计数器/逐节状态
+                # 已是可验证的真值，不因为卡片不渲染状态就把整门课判失败。
+                data = confirm_subject_layout_fallback(page, subject_url)
+                if data is None:
+                    raise
+                confirmation = 'course_page'
+                card_status = ''
             return {'verified': True, 'course': course, 'subject': subject,
-                    'confirmation': 'course_and_subject', 'card_status': '已完成'}
+                    'confirmation': confirmation, 'card_status': card_status}
         data = read_subject(page, url)
         engine.log(None, ev='subject', **data)
         pending = engine.required_items(data['items'])
