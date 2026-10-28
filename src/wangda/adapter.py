@@ -307,18 +307,13 @@ def play(browser, config, url):
                     raise LoginRequired()
                 raise Unconfirmed('Course directory/counter did not confirm completion')
             subject_url = f'{engine.HOST}/#/study/subject/detail/{subject}'
-            try:
+            # Read the subject page once: a statusless layout is confirmed from the course page
+            # directly, which avoids burning the whole confirmation window on every course.
+            if confirm_subject_layout_fallback(page, subject_url) is not None:
+                confirmation, card_status = 'course_page', ''
+            else:
                 confirm_subject(page, config, subject_url, course_ids=(course,))
-                confirmation = 'course_and_subject'
-                card_status = '已完成'
-            except Unconfirmed:
-                # 专区式专题页没有任何状态元素（st 全为空）：此时课程页自身的计数器/逐节状态
-                # 已是可验证的真值，不因为卡片不渲染状态就把整门课判失败。
-                data = confirm_subject_layout_fallback(page, subject_url)
-                if data is None:
-                    raise
-                confirmation = 'course_page'
-                card_status = ''
+                confirmation, card_status = 'course_and_subject', '已完成'
             return {'verified': True, 'course': course, 'subject': subject,
                     'confirmation': confirmation, 'card_status': card_status}
         data = read_subject(page, url)

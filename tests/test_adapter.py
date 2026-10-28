@@ -360,3 +360,15 @@ def test_course_run_still_fails_when_the_subject_page_shows_statuses(tmp_path):
             patch.object(engine, 'log'):
         with pytest.raises(Unconfirmed):
             play(browser, config, COURSE)
+
+
+def test_statusless_layout_skips_the_confirmation_window(tmp_path):
+    browser, _ = setup_browser()
+    cards = {'progress': '', 'items': [{'id': 'c1', 'type': '10', 'st': '', 'opt': False}]}
+    with patch.object(engine, 'run_course', return_value=True), \
+            patch('wangda.adapter.confirm_subject') as confirm, \
+            patch('wangda.adapter.read_subject', return_value=cards), \
+            patch.object(engine, 'log'):
+        result = play(browser, load_config(data_dir=tmp_path, env={}), COURSE)
+    confirm.assert_not_called()
+    assert result['confirmation'] == 'course_page'

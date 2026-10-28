@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. `wanda auth` needs no display; only the fallback browser login does.
 metadata:
   author: cnatom
-  version: "0.6.3"
+  version: "0.6.4"
 ---
 
 # Wangda real playback
