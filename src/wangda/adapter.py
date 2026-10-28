@@ -35,6 +35,9 @@ COURSE_PATH = re.compile(rf'/study/course/detail/subject-course/{ID}/6/{ID}')
 
 # Subject-card section types. 10 runs a full course session; the click types open the
 # item's own viewer so the platform records it; the rest must stay manual.
+# 1/2/6 were observed at *course-section* level (inside a course) in the reference tool,
+# so their appearance on a subject card is unverified — the click is still confirmed by
+# the card's own state, never by the dwell time.
 VIDEO_ITEM = '10'
 DWELL_ITEMS = {'1': 'doc', '2': 'image', '6': 'video'}
 CLICK_ITEMS = {'3': 'url'}

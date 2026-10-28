@@ -1,6 +1,6 @@
 # Agent integration
 
-The wangda skill manages local playback through the `wanda` CLI. It requires local shell access and a graphical browser for manual login.
+The wangda skill manages local playback through the `wanda` CLI. It requires local shell access; `wanda auth` logs in without a display, and only the fallback browser flow needs a graphical browser.
 
 ## Install the skill
 
@@ -20,7 +20,7 @@ The skill checks the runtime and installs the CLI from this repository using uv 
 
 Certificate claiming is an explicit user action, separate from playback. `wanda certificate '<subject-or-course-url>' --json` clicks only the platform's visible 领取证书 action and confirms the claimed state after a reload. `--download DIR` is opt-in and writes the platform-generated PNG locally. A certificate contains the learner's name and certificate number, so it must stay local. Do not auto-claim, and never retry `not_eligible` or `no_certificate` hoping the platform changes its mind.
 
-Authentication always belongs to the human. On waiting_login: explain the state, have the human complete `wanda login`, and resume after their confirmation. Do not exchange cookie/token files between the agent and user. The OAuth page detects attached devtools sessions and blanks a debug-port tab when an SMS code is requested, so a manual SMS login has to happen in a plain browser window on the dedicated profile; the CLI attaches afterwards. See [usage and configuration](usage.md#登录).
+Authentication always belongs to the human. `wanda auth` sends the SMS and reads the code from a local prompt; only the human types it, and the agent must never ask for, echo or log it. On waiting_login: explain the state, have the human run `wanda auth` again (in `--watch` mode the queue resumes by itself once a new token appears; otherwise `resume`), and do not exchange cookie/token files. The fallback browser flow exists because the OAuth page detects attached devtools sessions and blanks a debug-port tab when an SMS code is requested, so a manual SMS login has to happen in a plain browser window on the dedicated profile; the CLI attaches afterwards. See [usage and configuration](usage.md#登录).
 
 ## API contract
 
