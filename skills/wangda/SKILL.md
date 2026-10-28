@@ -81,6 +81,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - Course and subject progress can disagree temporarily. The CLI refreshes card state within the configured confirmation window; expiry means `unconfirmed`, not permission to replay indefinitely or manufacture a result.
 - Login needs a visible browser/display. A remote headless-only host must use a secure graphical session for authentication; do not export cookies into chat.
 - The OAuth login page runs a devtools detector: a tab whose CDP session is attached is blanked to `about:blank` when the user requests an SMS code, so a `--remote-debugging-port` window cannot finish an SMS login. To authenticate, open the same dedicated profile in a plain Chrome window without that flag, have the user log in there, close it, then run `inspect` or `run` and let the CLI attach. Playback pages are unaffected.
+- A course page whose section list reads all `已完成` but which shows `进度: 0%` and no 「完成 x 节 / 共 y 节」 counter cannot self-confirm. Treat that as `counter_absent` (short wait, then subject-card check), never as done on section state alone; only the subject card's `已完成` confirms credit. If the platform advances the tab to the next course after the last section, `page_advanced` ends the course without navigating back — re-entering replays the last section from 0 and wastes a full section per cycle.
 - Logs and profiles are private local data. Do not upload them or paste raw page/network state into issues.
 
 ## Verification and output
