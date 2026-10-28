@@ -70,6 +70,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 ## Boundaries and pitfalls
 
 - No forged reports, learning-time edits, direct completion-report API calls, account-limit bypass, or parallel sessions for one account.
+- One account admits one active course page. If another session holds a course page (for example the same account playing on a second machine), opening the course here shows 「您已打开新的课程详情页」 and the duplicate tab is blanked to `about:blank`; the queue then ends with `error_page_stop`/`unconfirmed`. Treat it as a concurrency conflict, not a course failure: stop, have the user end the other session, then resume.
 - Never claim a certificate the platform has not visibly offered, and never modify certificate eligibility or generate a substitute certificate.
 - Playback is muted at the browser level (`--mute-audio`) and the player volume is set to 0. Do not unmute it or add audio.
 - Background runner and worker processes must not open a visible terminal window. If one appears, stop the queue and restart with the current version.
