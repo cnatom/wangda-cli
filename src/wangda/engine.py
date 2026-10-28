@@ -105,7 +105,13 @@ SUBJECT_ITEMS = r"""
   const out = [];
   document.querySelectorAll('a[data-resource-id]').forEach(b => {
     let root = b;
-    for (let i = 0; i < 8 && root; i++) { root = root.parentElement; if (root && root.querySelector('.study-status')) break; }
+    // 标准卡片有 .study-status；专区式卡片没有，退回到「第一个正文≥2 行的祖先」
+    for (let i = 0; i < 8 && root; i++) {
+      root = root.parentElement;
+      if (!root) break;
+      if (root.querySelector('.study-status')) break;
+      if ((root.innerText || '').split('\n').filter(x => x.trim()).length >= 2) break;
+    }
     const card = root ? (root.innerText || '').replace(/\s+/g, ' ').trim() : '';
     // 平台模板给选修项渲染 <div class="required-tag">选修</div>；必修项没有这个标签。
     // 主判据用 .required-tag，兼容退化时退回卡片文本后缀。
@@ -113,8 +119,11 @@ SUBJECT_ITEMS = r"""
     const tagText = tag ? (tag.innerText || '').trim() : '';
     out.push({
       id: b.getAttribute('data-resource-id'),
+      btn: (b.innerText || '').trim(),
       type: b.getAttribute('data-section-type'),
-      st: root ? (root.querySelector('.study-status').innerText || '').trim() : '',
+      // 专区式布局的卡片没有 .study-status：缺元素时返回空串，不能解引用 null
+      st: (() => { const el = root ? root.querySelector('.study-status') : null;
+                   return el ? (el.innerText || '').trim() : ''; })(),
       opt: tag ? /选修/.test(tagText) : /(^|\s)选修\s*$/.test(card)
     });
   });
