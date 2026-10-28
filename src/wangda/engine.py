@@ -200,6 +200,23 @@ CREDIT_WAIT_S = 600
 
 TOTAL_RE = re.compile(r"课程总时长\s*(?:(\d+)\s*小时)?\s*(?:(\d+)\s*分钟)?")
 
+def all_sections_done(stat):
+    """每节可见状态都标注「已完成」。部分课程页没有 X/Y 计数器，这是唯一可见依据。"""
+    entries = [s for s in (stat or []) if isinstance(s, str) and s.strip()]
+    return bool(entries) and all("已完成" in s for s in entries)
+
+
+def page_full_kind(prog, stat):
+    """课程页的完成依据：'counter'（X/Y 计数器满）／'sections'（逐节状态）／None（未满）。
+
+    计数器存在时以计数器为准，不看逐节状态；计数器不渲染时才退回逐节状态。
+    """
+    m = re.match(r"完成\s*(\d+)\s*节\s*/\s*共\s*(\d+)\s*节", prog or "")
+    if m:
+        return "counter" if (m.group(2) != "0" and m.group(1) == m.group(2)) else None
+    return "sections" if all_sections_done(stat) else None
+
+
 def course_total_minutes(text):
     """从课程页正文取「课程总时长 X小时Y分钟」，返回分钟数；取不到返回 None。"""
     m = TOTAL_RE.search(text or "")
@@ -446,6 +463,7 @@ def run_course(p, course_id, subject_id, rate, logpath, stall_limit=6):
     stalls = 0
     advance_at = None
     credit_checked = False
+    full_ticks = 0
     confirm_at = None
     mismatch = 0
     last_reload_at = time.time()
@@ -501,10 +519,14 @@ def run_course(p, course_id, subject_id, rate, logpath, stall_limit=6):
         log(logpath, ev="tick", course=course_id, idx=idx, v=v, learn=wk.get("learn"), prog=prog,
             stat=st.get("stat"), allDone=st.get("allDone"), cnt=st.get("cnt"))
         m = re.match(r"完成\s*(\d+)\s*节\s*/\s*共\s*(\d+)\s*节", prog)
-        page_full = bool(m and m.group(2) != "0" and m.group(1) == m.group(2))
+        kind = page_full_kind(prog, st.get("stat"))
         complete = bool(st.get("allDone")) and (st.get("cnt") or 0) > 0
-        if complete and page_full:
-            log(logpath, ev="course_done", course=course_id, prog=prog, credited=True, rate=rate_now)
+        # 部分课程页不渲染「完成 X 节 / 共 Y 节」计数器（prog 为空）：此时以每节可见状态为准，
+        # 并要求连续两拍都成立，避免一次半渲染就判完成。
+        full_ticks = full_ticks + 1 if (complete and kind == "sections") else 0
+        if complete and (kind == "counter" or (kind == "sections" and full_ticks >= 2)):
+            log(logpath, ev="course_done", course=course_id, prog=prog, credited=True, rate=rate_now,
+                via=kind)
             return True
         if complete:
             confirm_at = confirm_at or time.time()

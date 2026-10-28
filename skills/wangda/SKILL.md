@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. `wanda auth` needs no display; only the fallback browser login does.
 metadata:
   author: cnatom
-  version: "0.6.0"
+  version: "0.6.1"
 ---
 
 # Wangda real playback
@@ -109,6 +109,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - `--continue-on-error` is allowed only when the user asks to ignore failures. It never turns a failed/unconfirmed item into completed.
 - `inspect` returning `{"status": "failed", "reason": "RuntimeError"}` with no `items` means the subject page produced no item list (unentitled, different layout, or blank page) — not an empty subject. Never report it as complete or as having no required items: queue it last, re-check it once the runner loads it, and report the state as still unknown.
 - Rates are restricted to 1.0, 1.2, and 1.5; availability still depends on platform/account rules.
+- Course completion is judged from the page: the 「完成 X 节 / 共 Y 节」 counter when the page renders it, otherwise every section showing 已完成 on two consecutive ticks. A course that finishes every section but never renders the counter used to end `course_unconfirmed` after the credit window; that fallback is what makes such courses confirm.
 - Required-item handling: type 10 runs a full course session; types 1 (文档), 2 (图片) and 6 (单项视频) click the card and keep its viewer open for `item_dwell_seconds` so the platform records it itself; type 3 is a plain URL click. Types 9 (考试), 14 (直播) and 16 (嵌套专题) are never clicked — the rest of the subject runs first, then the run ends `unconfirmed` with `Required items need manual handling: type …`. Dwell time never substitutes for the platform's own card state.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
 - Course and subject progress can disagree temporarily. The CLI refreshes card state within the confirmation window; expiry means `unconfirmed`, not permission to replay indefinitely or manufacture a result.
