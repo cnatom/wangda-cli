@@ -42,6 +42,10 @@ KEY_ALPHABET = string.ascii_letters + string.digits
 SESSION_FILE = 'session.json'
 # 网页端登录只拿到 access_token；平台声明的有效期是 4 小时（observed 14400）。
 DEFAULT_EXPIRES_IN = 14400
+# Read-only profile endpoint: proves whether a token still authenticates. It reports
+# nothing and writes nothing learning-related.
+PROBE = '/api/v1/human/member/center'
+
 USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
               '(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36')
 
@@ -178,6 +182,25 @@ def authenticate(transport, username, ask_code, key=SIGN_KEY):
 
 def authorization(session):
     return f"{session['token_type']}__{session['access_token']}"
+
+
+def verify_session(session, host='https://wangda.chinamobile.com', timeout=15, opener=urlopen):
+    """Ask the platform whether this token still works: 'ok', 'expired' or 'unknown'.
+
+    The declared lifetime is only a hint. Treating it as the truth would park a queue that
+    the platform would happily keep serving, so the caller asks the server before giving up.
+    """
+    token = f"{session.get('token_type') or 'Bearer'}__{session.get('access_token') or ''}"
+    headers = {'Authorization': token, 'Accept': 'application/json',
+               'X-Requested-With': 'XMLHttpRequest', 'User-Agent': USER_AGENT}
+    try:
+        with opener(Request(host.rstrip('/') + PROBE, headers=headers), timeout=timeout) as response:
+            return 'ok' if int(getattr(response, 'status', 200)) < 400 else 'expired'
+    except Exception as error:
+        code = getattr(error, 'code', None)
+        if code in (401, 403):
+            return 'expired'
+        return 'unknown'
 
 
 def is_fresh(session, margin=60):

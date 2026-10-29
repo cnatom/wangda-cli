@@ -211,9 +211,10 @@ def test_watch_is_bounded_by_max_passes(tmp_path):
     assert len(calls) == 2
 
 
-def test_watch_waits_for_a_new_token_instead_of_finishing(tmp_path):
+def test_watch_waits_for_a_new_token_instead_of_finishing(tmp_path, monkeypatch):
     import threading
     from wangda import auth
+    monkeypatch.setattr(auth, 'verify_session', lambda session, **kw: 'expired')
     cfg = load_config(data_dir=tmp_path, poll_seconds=0.05, retries=0, watch=True,
                       watch_interval=0.01, watch_max_passes=3, session_wait_seconds=5, env={})
 
@@ -252,3 +253,51 @@ def test_watch_without_a_session_file_does_not_hang_on_login_wall(tmp_path):
 
     assert Runner(cfg, worker_command=worker, browser=NoBrowser()).run([URL_A]) == 3
     assert len(calls) == 1
+
+
+def _runner_with_session(tmp_path, age):
+    import time as _time
+    from wangda import auth
+    cfg = load_config(data_dir=tmp_path, poll_seconds=0.01, env={})
+    session = {'access_token': 'tok', 'token_type': 'Bearer',
+               'expires_in': auth.DEFAULT_EXPIRES_IN, 'obtained_at': int(_time.time()) - age}
+    auth.write_private_json(tmp_path / auth.SESSION_FILE, session)
+    return cfg
+
+
+def test_expired_session_is_kept_when_the_platform_still_accepts_it(tmp_path, monkeypatch):
+    """声明的 4 小时到了不等于平台作废：先问服务端，别急着停在等登录。"""
+    from wangda import auth
+    cfg = _runner_with_session(tmp_path, age=auth.DEFAULT_EXPIRES_IN + 600)
+    runner = Runner(cfg, worker_command=lambda c, u: command('pass'), browser=NoBrowser())
+    monkeypatch.setattr(auth, 'verify_session', lambda session, **kw: 'ok')
+    assert runner.session_usable() is True
+    assert Store(tmp_path).read()['session_note'] == 'declared_expired_but_accepted'
+
+
+def test_expired_session_stops_the_queue_when_the_platform_rejects_it(tmp_path, monkeypatch):
+    from wangda import auth
+    cfg = _runner_with_session(tmp_path, age=auth.DEFAULT_EXPIRES_IN + 600)
+    runner = Runner(cfg, worker_command=lambda c, u: command('pass'), browser=NoBrowser())
+    monkeypatch.setattr(auth, 'verify_session', lambda session, **kw: 'expired')
+    assert runner.session_usable() is False
+
+
+def test_unreachable_probe_does_not_stop_the_queue(tmp_path, monkeypatch):
+    """探针问不到答案时不能武断停下：真过期的话，下一次页面加载会直接露出登录墙。"""
+    from wangda import auth
+    cfg = _runner_with_session(tmp_path, age=auth.DEFAULT_EXPIRES_IN + 600)
+    runner = Runner(cfg, worker_command=lambda c, u: command('pass'), browser=NoBrowser())
+    monkeypatch.setattr(auth, 'verify_session', lambda session, **kw: 'unknown')
+    assert runner.session_usable() is True
+    assert 'session_note' not in Store(tmp_path).read()
+
+
+def test_fresh_session_needs_no_probe(tmp_path, monkeypatch):
+    from wangda import auth
+    cfg = _runner_with_session(tmp_path, age=10)
+    runner = Runner(cfg, worker_command=lambda c, u: command('pass'), browser=NoBrowser())
+    def boom(*a, **kw):
+        raise AssertionError('fresh sessions must not be probed')
+    monkeypatch.setattr(auth, 'verify_session', boom)
+    assert runner.session_usable() is True

@@ -34,7 +34,9 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 `--watch` 让队列常驻：一轮跑完后不退出，把还没确认完成的链接重新排队，`--watch-interval`（默认 1800 秒）后再复查，最多 `watch_max_passes`（默认 6）轮，超了按最后一轮状态收尾。配合 `--background` 和一台国内常开的机器，就是无人值守模式；`status`/`pause`/`stop` 行为不变。
 
-登录拿到的 token 有效期约 4 小时，且平台用的是 implicit 授权、**没有 refresh_token**，无法静默续期。watch 模式在 token 过期时不会判失败：它会把状态置为 `waiting_login`（`reason=session_expired_waiting_for_auth`）并原地等待，你在任意时刻重跑一次 `wanda auth` 写入新 token，队列随后自动继续，不需要重新排队或重启。等待上限由 `session_wait_seconds`（默认 6 小时）控制。
+登录拿到的 token 声明有效期约 4 小时（`expires_in: 14400`）。这是**提示而不是吊销**：到期时 runner 会先用只读接口 `/api/v1/human/member/center` 问一次平台还认不认这个 token，仍然认就继续跑并在 `status` 里记 `session_note: declared_expired_but_accepted`；只有平台真的返回 401/403 才停到 `waiting_login` 等重新登录。探针失败（网络异常）不会中断队列，因为真过期的话下一页就会直接露出登录墙。该接口不写任何学习数据。
+
+，且平台用的是 implicit 授权、**没有 refresh_token**，无法静默续期。watch 模式在 token 过期时不会判失败：它会把状态置为 `waiting_login`（`reason=session_expired_waiting_for_auth`）并原地等待，你在任意时刻重跑一次 `wanda auth` 写入新 token，队列随后自动继续，不需要重新排队或重启。等待上限由 `session_wait_seconds`（默认 6 小时）控制。
 
 `certificate` 只点击平台已经显示的「领取证书」，领取后刷新页面确认服务端状态。`already_claimed` 表示此前已领取；`not_eligible` 表示条件未满足；`no_certificate` 表示该专题没有证书入口，三者都不会被绕过。`--download DIR` 会在领取后打开证书弹窗并把 PNG 保存到指定目录；默认不下载。刚完成手动登录时加 `--headed` 可复用当前可见窗口。证书含姓名和证书编号，只保存在本地，不要上传或粘贴到聊天、日志和 issue。
 

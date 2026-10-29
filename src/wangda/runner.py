@@ -172,7 +172,18 @@ class Runner:
             session = auth.read_session(self.config.data_dir / auth.SESSION_FILE)
         except auth.AuthError:
             return True
-        return bool(session and auth.is_fresh(session))
+        if not session or auth.is_fresh(session):
+            return True
+        # The declared lifetime is a hint, not the platform's answer: ask before parking.
+        state = auth.verify_session(session)
+        if state == 'ok':
+            # Visible in `status`: the declared lifetime passed, the platform still accepts it.
+            if self.state is None:
+                self.state = self.store.read()
+            self.state['session_note'] = 'declared_expired_but_accepted'
+            self.save()
+        # A probe that cannot answer must not stop the queue: the next page load reports the wall.
+        return state != 'expired'
 
     def wait_for_session(self):
         """Block until `wanda auth` writes a different token, or the wait budget runs out."""

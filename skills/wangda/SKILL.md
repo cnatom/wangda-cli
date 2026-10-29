@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. The default `wanda login` needs a graphical session; `wanda auth` needs none.
 metadata:
   author: cnatom
-  version: "0.7.1"
+  version: "0.7.2"
 ---
 
 # Wangda real playback
@@ -30,7 +30,7 @@ Use this skill when the user gives China Mobile Wangda course/subject links and 
 
 `wanda login` is the default path: it launches Chrome on the dedicated profile **without** a debugging port, the user completes the SMS login in that window, and once the window is closed the CLI attaches, reads the `localStorage["token"]` the web app itself wrote, and saves it to `<data-dir>/session.json` (0600). The close-then-attach order is mandatory, not stylistic: the `/oauth/` login page detects an attached devtools session and blanks itself to `about:blank` when an SMS code is requested, so a `--remote-debugging-port` window can never finish a login. Adoption is judged from visible state (on the wangda host, no login wall, non-empty body), never from "a token exists": a leftover expired token also reads fine on `about:blank` because blank documents inherit the opener's origin.
 
-`wanda auth` is the headless alternative and runs the same SMS login over HTTP — no window, no profile lock, works on a remote host with no display. It writes the same `<data-dir>/session.json`, and `inspect`/`run` inject that token into the dedicated browser's `localStorage["token"]` before navigating. Either way the token lives about four hours (`expires_in` 14400) and the platform uses the implicit grant with **no refresh token**, so it cannot be renewed silently — log in again when `doctor` reports `session.fresh: false` or `expires_in_remaining` under ~300. In `--watch` mode an expired token does not fail the queue: the run parks at `waiting_login` with `reason=session_expired_waiting_for_auth`, waits up to `session_wait_seconds` for a newly written token, then continues the same queue.
+`wanda auth` is the headless alternative and runs the same SMS login over HTTP — no window, no profile lock, works on a remote host with no display. It writes the same `<data-dir>/session.json`, and `inspect`/`run` inject that token into the dedicated browser's `localStorage["token"]` before navigating. Either way the token *declares* about four hours (`expires_in` 14400) and the platform uses the implicit grant with **no refresh token**, so it cannot be renewed silently. The declared lifetime is a hint, not a revocation: when it passes, the runner asks the platform once with a read-only profile GET (`/api/v1/human/member/center`, writes no learning data) and keeps going if the token is still accepted, recording `session_note: declared_expired_but_accepted` in `status`. Only a real 401/403 parks the queue at `waiting_login`. Have the user log in again when `doctor` reports `session.fresh: false` **and** the queue actually parked. In `--watch` mode an expired token does not fail the queue: the run parks at `waiting_login` with `reason=session_expired_waiting_for_auth`, waits up to `session_wait_seconds` for a newly written token, then continues the same queue.
 
 ```sh
 wanda login                                                 # default: plain window, close it when done
