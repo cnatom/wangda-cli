@@ -65,6 +65,10 @@ class FakeBrowser:
     page_obj = None
     attached_headed = None
     proc = None
+    storage = [0.0]
+
+    def storage_mtime(self):
+        return FakeBrowser.storage.pop(0) if len(FakeBrowser.storage) > 1 else FakeBrowser.storage[0]
 
     def __init__(self, config):
         pass
@@ -83,10 +87,11 @@ class FakeBrowser:
         pass
 
 
-def login(tmp_path, page, timeout=5, proc=None):
+def login(tmp_path, page, timeout=5, proc=None, storage=None):
     FakeBrowser.page_obj = page
     FakeBrowser.attached_headed = None
     FakeBrowser.proc = proc
+    FakeBrowser.storage = storage or [0.0]
     with patch.object(adapter, 'Browser', FakeBrowser), \
             patch.object(adapter.time, 'sleep', lambda seconds: None), \
             patch.object(adapter.time, 'monotonic', side_effect=itertools.count()):
@@ -128,6 +133,16 @@ def test_window_left_open_times_out_and_is_terminated(tmp_path):
         login(tmp_path, FakePage({'access_token': 'x'}), timeout=5, proc=proc)
     assert proc.terminated is True
     assert not (tmp_path / auth.SESSION_FILE).exists()
+
+
+def test_token_written_to_local_storage_ends_the_wait_even_if_chrome_stays_alive(tmp_path):
+    """Chrome 关窗后进程仍在：Local Storage 被写入同样说明登录已完成。"""
+    proc = FakeProc(open_polls=10**9)
+    page = FakePage({'access_token': 'abc123'})
+    session = login(tmp_path, page, proc=proc, storage=[1.0, 2.0])
+    assert session['access_token'] == 'abc123'
+    assert proc.terminated is True                      # 接管前先收掉残留进程
+    assert FakeBrowser.attached_headed is False
 
 
 def test_no_token_after_closing_is_rejected(tmp_path):

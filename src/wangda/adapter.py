@@ -77,7 +77,7 @@ def install_session(page, config):
     return session
 
 
-def browser_login(config, timeout=600, poll=1.0):
+def browser_login(config, timeout=600, poll=1.0, settle=3.0):
     """Log in by hand in a plain Chrome window, then adopt what the web app stored.
 
     The login page refuses to work while a devtools session is attached (it blanks itself), so
@@ -88,13 +88,21 @@ def browser_login(config, timeout=600, poll=1.0):
     inherit the opener's origin) while the app itself is still on the login wall.
     """
     browser = Browser(config)
+    marker = browser.storage_mtime()
     proc = browser.launch_plain(engine.HOST + '/', headed=True)
     deadline = time.monotonic() + timeout
-    while proc.poll() is None:
+    # Chrome keeps a process alive after its last window closes, so "the window is gone" cannot be
+    # detected from the process alone: the app writing its token into Local Storage also ends the
+    # wait, and the leftover process is closed by the attach step below.
+    while proc.poll() is None and browser.storage_mtime() <= marker:
         if time.monotonic() >= deadline:
             proc.terminate()
-            raise LoginRequired('The login window was not closed in time; log in, close it, and retry')
+            raise LoginRequired('Login did not complete in time; log in, close the window, and retry')
         time.sleep(poll)
+    if proc.poll() is None:
+        time.sleep(settle)                        # let the token write flush before taking over
+    if proc.poll() is None:
+        proc.terminate()
     # The window is gone: attach and read the session the platform itself created.
     browser.open(headed=False)
     page = browser.page()

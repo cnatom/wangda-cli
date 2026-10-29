@@ -199,6 +199,16 @@ class Browser:
         args += [url]
         return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def storage_mtime(self):
+        """Newest mtime under the profile's Local Storage: the app writing a token moves it."""
+        newest = 0.0
+        for path in self.config.profile.glob('*/Local Storage/leveldb/*'):
+            try:
+                newest = max(newest, path.stat().st_mtime)
+            except OSError:
+                pass
+        return newest
+
     def page(self):
         tabs = [t for t in self.http_json('/json/list') if t.get('type') == 'page']
         target = tabs[0] if tabs else self.http_json('/json/new?about:blank', method='PUT')
