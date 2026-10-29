@@ -165,6 +165,31 @@ DEVTOOL_GUARD = r"""
 })()
 """
 
+READ_TOKEN = r"""
+(() => {
+  try {
+    const raw = localStorage.getItem('token');
+    if (!raw) return null;
+    const t = JSON.parse(raw);
+    if (!t || !t.access_token) return null;
+    return JSON.stringify({access_token: t.access_token, token_type: t.token_type || 'Bearer'});
+  } catch (e) { return null; }
+})()
+"""
+
+
+def session_token(p):
+    """The token the web app itself stores, or None while the login wall is up."""
+    raw = p.js(READ_TOKEN)
+    if not raw:
+        return None
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) and value.get('access_token') else None
+
+
 SECTION_STATE = r"""
 (() => {
   const list = Array.from(document.querySelectorAll('dl[data-sectiontype]'));
@@ -415,6 +440,24 @@ def is_login_wall(p):
         return "短信验证登录" in t or "获取验证码" in t
     except Exception:
         return False
+
+def signed_in(p):
+    """Visible proof that the app is signed in: on our host, no login wall, real content.
+
+    A leftover token in the profile keeps reading fine even on about:blank (blank pages inherit
+    the opener's origin), so the token alone is never accepted as proof of a session.
+    """
+    try:
+        href = p.js("location.href") or ""
+        if not href.startswith(HOST) or "/oauth/" in href:
+            return False
+        if is_login_wall(p):
+            return False
+        text = p.js("document.body ? document.body.innerText : ''") or ""
+        return len(text.strip()) > 100
+    except Exception:
+        return False
+
 
 def ensure_course_page(p, course_id, subject_id, logpath):
     """导航到课程页；先清掉 SPA 残留课程，平台把重复打开判为错误页时点「继续学习」恢复。"""

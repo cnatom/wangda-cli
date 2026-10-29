@@ -10,7 +10,7 @@
 - 可选 `--continue-on-error`：单个课程失败后继续刷后续课程，但失败项不会被算作完成。
 - 默认完全静音播放，不输出声音。
 - 领取已完成专题的结业证书，可按需下载证书 PNG。
-- 免浏览器的协议登录（`wanda auth`），可在没有图形界面的远程主机完成短信登录。
+- 默认浏览器登录（`wanda login`）：在本机干净窗口完成短信登录，关窗后 CLI 自动接管；另有免浏览器的协议登录（`wanda auth`）用于无图形界面的远程主机。
 - 完成后核对平台状态，自动关闭专用浏览器并保留登录态。
 
 ## 安装
@@ -21,7 +21,7 @@
 npx skills add cnatom/wangda-cli --skill wangda
 ```
 
-安装命令需要 Node.js / npx。运行需要 Python 3.11+、Git、uv 和 Chrome / Chromium；首次使用时，智能体会检查环境并安装 CLI。登录可用 `wanda auth` 在终端完成，短信验证码由本人输入，不需要图形界面。
+安装命令需要 Node.js / npx。运行需要 Python 3.11+、Git、uv 和 Chrome / Chromium；首次使用时，智能体会检查环境并安装 CLI。登录默认用 `wanda login`：CLI 打开一扇干净的 Chrome 窗口，你完成短信登录后关掉它，CLI 自动接管登录态；没有图形界面时改用 `wanda auth` 在终端完成。
 
 ## 使用
 

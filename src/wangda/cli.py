@@ -14,8 +14,8 @@ from filelock import Timeout
 import psutil
 
 from . import __version__, auth, engine
-from .adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, claim_certificate,
-                      inspect, validate_url)
+from .adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, browser_login,
+                      claim_certificate, inspect, validate_url)
 from .browser import Browser, discover_browser
 from .config import load_config
 from .runner import Runner
@@ -87,6 +87,9 @@ def parser():
                              help='Keep re-checking and re-running until every entry is confirmed complete')
             sub.add_argument('--watch-interval', type=float, default=None)
             sub.add_argument('--background', action='store_true')
+        if name == 'login':
+            sub.add_argument('--timeout', type=float, default=600,
+                             help='Seconds to wait for the manual login in the dedicated window')
         if name in ('pause', 'stop'):
             sub.add_argument('--timeout', type=float, default=15)
         if name == 'logs':
@@ -204,14 +207,10 @@ def main(argv=None):
                   'expires_in': session['expires_in'], 'session': str(path)})
         elif args.command == 'login':
             with exclusive(config):
-                browser = Browser(config)
-                browser.open(headed=True)
-                page = browser.page()
-                try:
-                    page.goto(engine.HOST + '/')
-                finally:
-                    page.close()
-                emit({'status': 'waiting_login', 'detail': 'Complete login yourself in the dedicated window, then run/resume. Use stop to close it.'})
+                session = browser_login(config, timeout=args.timeout)
+                emit({'status': 'ready', 'source': 'browser',
+                      'expires_in': session['expires_in'],
+                      'session': str(config.data_dir / auth.SESSION_FILE)})
         elif args.command == 'inspect':
             validate_url(args.url)
             with exclusive(config):

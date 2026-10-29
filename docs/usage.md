@@ -8,9 +8,9 @@
 
 ```sh
 wanda doctor --json
+wanda login
 wanda auth --probe --json
 wanda auth --username '<工号或手机号>' --json
-wanda login
 wanda inspect '<课程或专题链接>' --json
 wanda certificate '<专题或专题课程链接>' --json
 wanda certificate '<专题或专题课程链接>' --download ./certificates --json
@@ -34,7 +34,7 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 `--watch` 让队列常驻：一轮跑完后不退出，把还没确认完成的链接重新排队，`--watch-interval`（默认 1800 秒）后再复查，最多 `watch_max_passes`（默认 6）轮，超了按最后一轮状态收尾。配合 `--background` 和一台国内常开的机器，就是无人值守模式；`status`/`pause`/`stop` 行为不变。
 
-`wanda auth` 的 token 有效期约 4 小时，且平台用的是 implicit 授权、**没有 refresh_token**，无法静默续期。watch 模式在 token 过期时不会判失败：它会把状态置为 `waiting_login`（`reason=session_expired_waiting_for_auth`）并原地等待，你在任意时刻重跑一次 `wanda auth` 写入新 token，队列随后自动继续，不需要重新排队或重启。等待上限由 `session_wait_seconds`（默认 6 小时）控制。
+登录拿到的 token 有效期约 4 小时，且平台用的是 implicit 授权、**没有 refresh_token**，无法静默续期。watch 模式在 token 过期时不会判失败：它会把状态置为 `waiting_login`（`reason=session_expired_waiting_for_auth`）并原地等待，你在任意时刻重跑一次 `wanda auth` 写入新 token，队列随后自动继续，不需要重新排队或重启。等待上限由 `session_wait_seconds`（默认 6 小时）控制。
 
 `certificate` 只点击平台已经显示的「领取证书」，领取后刷新页面确认服务端状态。`already_claimed` 表示此前已领取；`not_eligible` 表示条件未满足；`no_certificate` 表示该专题没有证书入口，三者都不会被绕过。`--download DIR` 会在领取后打开证书弹窗并把 PNG 保存到指定目录；默认不下载。刚完成手动登录时加 `--headed` 可复用当前可见窗口。证书含姓名和证书编号，只保存在本地，不要上传或粘贴到聊天、日志和 issue。
 
@@ -52,24 +52,22 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 专题页有两种布局：标准卡片带 `.study-status`（已完成/学习中/未开始），专区式卡片只有「开始学习/继续学习」按钮、没有状态元素。后者现在也能正常解析（状态记为空、按钮文案存 `btn`）。这类布局无法从卡片确认完成，因此单门课程的 `run` 会在专题卡片复核失败后，回退为按课程页自身计数器/逐节状态确认，结果标 `confirmation: course_page`；只要专题页上有任何状态元素，就不会走这个回退。
 
-暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 有意保持窗口，供本人登录；结束后可用 `stop` 关闭。机器重启后需显式恢复任务。
+暂停、停止和完成会关闭专用浏览器并保留登录态。`login` 会在你登录并关闭那扇窗后自动接管并写入会话。机器重启后需显式恢复任务。
 
 ## 登录
 
-登录页（`/oauth/`）内嵌 devtools 检测：只要标签页带着已连接的调试会话，点「获取验证码」后页面会自己跳到 `about:blank`，控制台留下 `You don't have permission to use DEVTOOL!【type = 6】`。因此带 `--remote-debugging-port` 的窗口无法完成短信登录，`wanda login` 打开的那一页只能用来确认登录墙位置。
-
-需要本人登录时，用同一 profile 打开一个不带调试端口的普通浏览器窗口，登录完成后关闭它，再让 CLI 接管：
+默认用 `wanda login`：它用专用 profile 打开一扇**不带调试端口**的普通 Chrome 窗口，你在这扇窗里完成短信登录，然后**把它关掉**，CLI 会立刻附着同一 profile、读出网页自己写下的 `localStorage["token"]`，写进 `<data-dir>/session.json`（0600）。
 
 ```sh
-# 关闭自动化浏览器，保持 profile 与登录态
-wanda stop --json
-# 用同一 profile 打开登录页，此窗口不带 --remote-debugging-port
-open -na "Google Chrome" --args --user-data-dir="$PROFILE" https://wangda.chinamobile.com/
-# 本人完成登录并关闭该窗口后，验证登录态
-wanda inspect '<课程或专题链接>' --json
+wanda login                      # 打开干净窗口，登录完关窗即可，默认最多等 600 秒
+wanda login --timeout 1200       # 慢慢来
 ```
 
-登录完成后不要再用 `wanda login` 打开调试端口窗口，也不要导出 cookie；直接 `inspect`/`run`，CLI 会在需要时自己附加调试会话。视频播放页不受该检测影响。
+为什么要关窗再接管：登录页（`/oauth/`）内嵌 devtools 检测，只要标签页带着已连接的调试会话，点「获取验证码」后页面会自己跳到 `about:blank`（控制台留 `You don't have permission to use DEVTOOL!【type = 6】`）。所以登录必须发生在没有调试端口的窗口里，CLI 只能在事后附着。视频播放页不受该检测影响。
+
+接管时的判定来自页面可见状态，而不是「localStorage 里有没有 token」：残留的过期 token 在 `about:blank` 上也读得出来（空白页继承 opener 的源），所以必须同时满足「在 wangda.chinamobile.com 上」「没有登录墙」「正文非空」才认。任何一条不满足都会报 `LoginRequired`，不会把过期会话当成登录成功。
+
+登录态本身也存在 profile 里：即使 `session.json` 缺失，`inspect`/`run` 用同一个 profile 也能直接用。`session.json` 的作用是让 `doctor` 能报剩余时间，并给 `--watch` 的过期等待提供依据。
 
 ### 免图形界面的协议登录（`wanda auth`）
 

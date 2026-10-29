@@ -2,10 +2,10 @@
 name: wangda
 description: Use when playing, resuming, or certifying Wangda courses.
 license: MIT
-compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. `wanda auth` needs no display; only the fallback browser login does.
+compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. The default `wanda login` needs a graphical session; `wanda auth` needs none.
 metadata:
   author: cnatom
-  version: "0.6.5"
+  version: "0.7.0"
 ---
 
 # Wangda real playback
@@ -16,7 +16,7 @@ Use this skill when the user gives China Mobile Wangda course/subject links and 
 
 1. Check and initialize the runtime using the first-use instructions below. Do not launch a learning queue until environment checks pass.
 2. Use only the user's authorized account and comply with the platform and employer's learning rules. Playback does not establish comprehension or satisfy obligations to attend personally.
-3. Authenticate with `wanda auth` (protocol login, no GUI) or, when a visible browser is genuinely needed, through the dedicated profile (see 「Login and profile reuse」). The SMS code is typed by the user at the CLI prompt; never ask for, echo, read or log it, and never handle passwords, cookies or tokens.
+3. Authenticate with `wanda login` by default: the CLI opens a plain window on the dedicated profile, the user logs in there and closes it, and the CLI then adopts what the web app stored. Use `wanda auth` when there is no display (see 「Login and profile reuse」). The SMS code is typed by the user; never ask for, echo, read or log it, and never handle passwords, cookies or tokens.
 4. Preserve the same configuration/data directory **and** `--profile` for every command in one task: a login does not transfer between profiles. Never use the user's normal browser profile.
 
 ## First-use setup
@@ -28,11 +28,14 @@ Use this skill when the user gives China Mobile Wangda course/subject links and 
 
 ## Login and profile reuse
 
-`wanda auth` is the default path: it runs the same SMS login over HTTP, writes `<data-dir>/session.json` (0600), and `inspect`/`run` inject that token into the dedicated browser's `localStorage["token"]` before navigating. No window, no profile lock, works on a headless remote host. The token lives about four hours (`expires_in` 14400) and the platform uses the implicit grant with **no refresh token**, so it cannot be renewed silently — re-run `auth` when `doctor` reports `session.fresh: false` or `expires_in_remaining` under ~300. In `--watch` mode an expired token does not fail the queue: the run parks at `waiting_login` with `reason=session_expired_waiting_for_auth`, waits up to `session_wait_seconds` for a newly written token, then continues the same queue.
+`wanda login` is the default path: it launches Chrome on the dedicated profile **without** a debugging port, the user completes the SMS login in that window, and once the window is closed the CLI attaches, reads the `localStorage["token"]` the web app itself wrote, and saves it to `<data-dir>/session.json` (0600). The close-then-attach order is mandatory, not stylistic: the `/oauth/` login page detects an attached devtools session and blanks itself to `about:blank` when an SMS code is requested, so a `--remote-debugging-port` window can never finish a login. Adoption is judged from visible state (on the wangda host, no login wall, non-empty body), never from "a token exists": a leftover expired token also reads fine on `about:blank` because blank documents inherit the opener's origin.
+
+`wanda auth` is the headless alternative and runs the same SMS login over HTTP — no window, no profile lock, works on a remote host with no display. It writes the same `<data-dir>/session.json`, and `inspect`/`run` inject that token into the dedicated browser's `localStorage["token"]` before navigating. Either way the token lives about four hours (`expires_in` 14400) and the platform uses the implicit grant with **no refresh token**, so it cannot be renewed silently — log in again when `doctor` reports `session.fresh: false` or `expires_in_remaining` under ~300. In `--watch` mode an expired token does not fail the queue: the run parks at `waiting_login` with `reason=session_expired_waiting_for_auth`, waits up to `session_wait_seconds` for a newly written token, then continues the same queue.
 
 ```sh
+wanda login                                                 # default: plain window, close it when done
 wanda auth --probe --json                                   # read-only: public key + sign, no SMS
-wanda auth --username '<employee-id-or-phone>' --json       # sends the SMS, then a no-echo prompt
+wanda auth --username '<employee-id-or-phone>' --json       # headless: sends the SMS, then a no-echo prompt
 printf '%s\n' '<code>' | wanda auth --username '<...>' --code-stdin --json
 ```
 
@@ -60,9 +63,9 @@ Execute commands using the agent's shell tool.
 
 ```sh
 wanda doctor --json
+wanda login
 wanda auth --probe --json
 wanda auth --username '<employee-id-or-phone>' --json
-wanda login
 wanda inspect 'https://wangda.chinamobile.com/#/study/subject/detail/EXAMPLE_TOPIC/1' --json
 wanda certificate '<subject-or-course-URL>' --json
 wanda certificate '<subject-or-course-URL>' --download '<local-directory>' --json
@@ -114,8 +117,8 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - Required-item handling: type 10 runs a full course session; types 1 (文档), 2 (图片) and 6 (单项视频) click the card and keep its viewer open for `item_dwell_seconds` so the platform records it itself; type 3 is a plain URL click. Types 9 (考试), 14 (直播) and 16 (嵌套专题) are never clicked — the rest of the subject runs first, then the run ends `unconfirmed` with `Required items need manual handling: type …`. Dwell time never substitutes for the platform's own card state.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
 - Course and subject progress can disagree temporarily. The CLI refreshes card state within the confirmation window; expiry means `unconfirmed`, not permission to replay indefinitely or manufacture a result.
-- Login needs no display with `wanda auth`; only the fallback browser flow needs a secure graphical session. Never export cookies into chat.
-- The OAuth login page runs a devtools detector: a tab with an attached CDP session is blanked to `about:blank` when the user requests an SMS code, so a `--remote-debugging-port` window can never finish an SMS login — hence the plain-window procedure in 「Login and profile reuse」. Playback pages are unaffected.
+- `wanda login` needs a graphical session (the human logs in and closes the window before the CLI attaches); `wanda auth` needs none. Never export cookies into chat.
+- The OAuth login page runs a devtools detector: a tab with an attached CDP session is blanked to `about:blank` when the user requests an SMS code. That is why `wanda login` opens a plain (no-debug-port) window and only attaches after it closes, and why a session is adopted only from visible signed-in state. Playback pages are unaffected.
 - The platform allows one active course page per account. Opening a course while another session (the user's own browser on another machine, or a leftover tab) holds a course page renders 「您已打开新的课程详情页」 and then blanks the tab to `about:blank`; the CLI reports `error_page_stop` and the whole subject ends `unconfirmed`. Treat it as a concurrency conflict, not a course failure: clicking 继续学习 does not survive the blank, so retrying the queue cannot recover it: ask the user to close Wangda course/study tabs everywhere else, then `resume`.
 - Logs and profiles are private local data. Do not upload them or paste raw page/network state into issues.
 - Exit code 5 means another process owns the profile, almost always the plain login window or a leftover runner; diagnose with `pgrep -f '<profile>'` and never "fix" it by pointing at the CLI default profile, which has no login.

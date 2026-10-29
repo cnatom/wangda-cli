@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import auth, engine
+from .browser import Browser
 
 
 class LoginRequired(Exception):
@@ -74,6 +75,44 @@ def install_session(page, config):
                         'token_type': session['token_type'], 'is_weak_pwd': 'false'})
     page.js(f"localStorage.setItem('token', {json.dumps(token)})")
     return session
+
+
+def browser_login(config, timeout=600, poll=1.0):
+    """Log in by hand in a plain Chrome window, then adopt what the web app stored.
+
+    The login page refuses to work while a devtools session is attached (it blanks itself), so
+    the human login has to run in a window without the debugging port. The CLI therefore opens
+    the dedicated profile plainly, waits for that window to be closed, then attaches and reads
+    the app's own localStorage entry. A token is adopted only when the app visibly renders
+    signed-in content: a leftover token keeps reading fine on a blank page (blank documents
+    inherit the opener's origin) while the app itself is still on the login wall.
+    """
+    browser = Browser(config)
+    proc = browser.launch_plain(engine.HOST + '/', headed=True)
+    deadline = time.monotonic() + timeout
+    while proc.poll() is None:
+        if time.monotonic() >= deadline:
+            proc.terminate()
+            raise LoginRequired('The login window was not closed in time; log in, close it, and retry')
+        time.sleep(poll)
+    # The window is gone: attach and read the session the platform itself created.
+    browser.open(headed=False)
+    page = browser.page()
+    try:
+        page.goto(engine.HOST + '/#/home', wait=8)
+        token = engine.session_token(page)
+        if not token or not engine.signed_in(page):
+            raise LoginRequired('No signed-in session after the login window closed: log in again')
+        session = {'access_token': token['access_token'],
+                   'token_type': token.get('token_type') or 'Bearer',
+                   'expires_in': auth.DEFAULT_EXPIRES_IN,
+                   'obtained_at': int(time.time()),
+                   'source': 'browser'}
+        auth.write_private_json(config.data_dir / auth.SESSION_FILE, session)
+        return session
+    finally:
+        page.close()
+        browser.close()
 
 
 def read_subject(page, url, wait=45):

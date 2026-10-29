@@ -181,6 +181,24 @@ class Browser:
         self.close()
         raise RuntimeError('Dedicated browser did not start within 35 seconds')
 
+    def launch_plain(self, url, headed=True):
+        """Start Chrome on the dedicated profile with no debugging port attached.
+
+        The login page detects an attached devtools session and blanks itself, so the human
+        login has to happen in a plain window; the CLI attaches only after that window closes.
+        """
+        self.close()
+        executable = discover_browser(self.config.browser)
+        self.config.profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+        (self.config.profile / 'DevToolsActivePort').unlink(missing_ok=True)
+        args = [executable, f'--user-data-dir={self.config.profile}',
+                '--no-first-run', '--no-default-browser-check', '--window-size=1280,900',
+                '--autoplay-policy=no-user-gesture-required', '--mute-audio', *ANTI_FREEZE]
+        if not headed:
+            args += ['--headless=new']
+        args += [url]
+        return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def page(self):
         tabs = [t for t in self.http_json('/json/list') if t.get('type') == 'page']
         target = tabs[0] if tabs else self.http_json('/json/new?about:blank', method='PUT')

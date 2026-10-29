@@ -1,6 +1,6 @@
 # Agent integration
 
-The wangda skill manages local playback through the `wanda` CLI. It requires local shell access; `wanda auth` logs in without a display, and only the fallback browser flow needs a graphical browser.
+The wangda skill manages local playback through the `wanda` CLI. It requires local shell access; `wanda login` is the default login (a plain window the human logs in to and closes) and `wanda auth` covers hosts without a display.
 
 ## Install the skill
 
@@ -20,7 +20,7 @@ The skill checks the runtime and installs the CLI from this repository using uv 
 
 Certificate claiming is an explicit user action, separate from playback. `wanda certificate '<subject-or-course-url>' --json` clicks only the platform's visible 领取证书 action and confirms the claimed state after a reload. `--download DIR` is opt-in and writes the platform-generated PNG locally. A certificate contains the learner's name and certificate number, so it must stay local. Do not auto-claim, and never retry `not_eligible` or `no_certificate` hoping the platform changes its mind.
 
-Authentication always belongs to the human. `wanda auth` sends the SMS and reads the code from a local prompt; only the human types it, and the agent must never ask for, echo or log it. On waiting_login: explain the state, have the human run `wanda auth` again (in `--watch` mode the queue resumes by itself once a new token appears; otherwise `resume`), and do not exchange cookie/token files. The fallback browser flow exists because the OAuth page detects attached devtools sessions and blanks a debug-port tab when an SMS code is requested, so a manual SMS login has to happen in a plain browser window on the dedicated profile; the CLI attaches afterwards. See [usage and configuration](usage.md#登录).
+Authentication always belongs to the human. `wanda login` opens a plain window on the dedicated profile: the human logs in, closes it, and the CLI adopts the session the web app stored; with `wanda auth` the SMS goes out and the code is read from a local prompt, so only the human types it. The agent must never ask for, echo or log a code, and must not exchange cookie/token files. On waiting_login: explain the state, have the human log in again (in `--watch` mode the queue resumes by itself once a new token appears; otherwise `resume`). The login page detects attached devtools sessions and blanks a debug-port tab when an SMS code is requested, which is why `login` uses a window with no debugging port and only attaches after it closes. See [usage and configuration](usage.md#登录).
 
 ## API contract
 

@@ -40,6 +40,8 @@ AUTH = '/oauth/api/v1/auth'
 SIGN_KEY = 'no-date'
 KEY_ALPHABET = string.ascii_letters + string.digits
 SESSION_FILE = 'session.json'
+# 网页端登录只拿到 access_token；平台声明的有效期是 4 小时（observed 14400）。
+DEFAULT_EXPIRES_IN = 14400
 USER_AGENT = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
               '(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36')
 
