@@ -38,6 +38,8 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 ，且平台用的是 implicit 授权、**没有 refresh_token**，无法静默续期。watch 模式在 token 过期时不会判失败：它会把状态置为 `waiting_login`（`reason=session_expired_waiting_for_auth`）并原地等待，你在任意时刻重跑一次 `wanda auth` 写入新 token，队列随后自动继续，不需要重新排队或重启。等待上限由 `session_wait_seconds`（默认 6 小时）控制。
 
+`wanda plan '<链接…>' --rate 1.5 --json` 只读地打开每门课程页，取页面上的「课程总时长」，给出每门课的分钟数、总时长和按倍速折算的实际耗时，用来在开跑前知道要花多久。它和 `inspect` 一样独占 profile：队列在跑时会被拒绝，因为平台只允许同一账号同一时刻打开一个课程页。
+
 `certificate` 只点击平台已经显示的「领取证书」，领取后刷新页面确认服务端状态。`already_claimed` 表示此前已领取；`not_eligible` 表示条件未满足；`no_certificate` 表示该专题没有证书入口，三者都不会被绕过。`--download DIR` 会在领取后打开证书弹窗并把 PNG 保存到指定目录；默认不下载。刚完成手动登录时加 `--headed` 可复用当前可见窗口。证书含姓名和证书编号，只保存在本地，不要上传或粘贴到聊天、日志和 issue。
 
 `status` 自带 `progress` 汇总，一条命令就能回答「刷到哪了」：`completed` / `total` / `percent`、各状态计数（`pending`、`running`、`unconfirmed`、`failed`）、`current`（正在播的课程 id、`position` / `duration`、`rate`、`sections` 小节计数器）、`eta`（剩余时间估算）、`pass`（watch 第几轮）与 `session_note`（如 `declared_expired_but_accepted`）。

@@ -154,6 +154,40 @@ def read_certificate_page(page, url, subject, wait=45):
         time.sleep(1)
 
 
+def plan(browser, config, urls, rate=1.5):
+    """Read every course page's own 「课程总时长」: exact remaining time, no playback.
+
+    Opening a course page is enough to read the total, but the platform allows only one course
+    page per account at a time, so this must not run while a queue plays (the CLI takes the same
+    exclusive lock as `inspect`).
+    """
+    page = prepare(browser, config)
+    courses, missing = [], []
+    for url in urls:
+        subject, course = engine.parse_url(url)
+        page.goto(url, wait=10)
+        if engine.is_login_wall(page):
+            raise LoginRequired('Run wanda login and authenticate yourself')
+        deadline = time.monotonic() + 30
+        minutes = None
+        while True:
+            text = page.js('document.body ? document.body.innerText.slice(0, 4000) : ""') or ''
+            minutes = engine.course_total_minutes(text)
+            if minutes is not None or time.monotonic() >= deadline:
+                break
+            time.sleep(1)
+        if minutes is None:
+            missing.append(url)
+            continue
+        courses.append({'url': url, 'subject': subject, 'course': course,
+                        'minutes': minutes, 'seconds': minutes * 60,
+                        'seconds_at_rate': int(round(minutes * 60 / rate))})
+    total = sum(item['seconds'] for item in courses)
+    return {'rate': rate, 'courses': courses, 'missing': missing,
+            'total_seconds': total,
+            'total_seconds_at_rate': int(round(total / rate)) if rate else None}
+
+
 def inspect(browser, config, url):
     validate_url(url)
     page = None

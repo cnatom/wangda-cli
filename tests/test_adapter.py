@@ -372,3 +372,36 @@ def test_statusless_layout_skips_the_confirmation_window(tmp_path):
         result = play(browser, load_config(data_dir=tmp_path, env={}), COURSE)
     confirm.assert_not_called()
     assert result['confirmation'] == 'course_page'
+
+
+def test_plan_reads_the_course_total_from_the_page(tmp_path):
+    from wangda import adapter as adapter_module
+    texts = iter(['课程总时长 1小时20分钟 共 3 节', '课程总时长 45分钟'])
+
+    class P:
+        def goto(self, url, wait=0):
+            pass
+        def js(self, source):
+            return next(texts) if 'innerText' in source else ''
+        def close(self):
+            pass
+
+    class B:
+        def __init__(self, config):
+            pass
+        def open(self, headed=False):
+            pass
+        def page(self):
+            return P()
+
+    url1 = 'https://wangda.chinamobile.com/#/study/course/detail/subject-course/c1/6/s1'
+    url2 = 'https://wangda.chinamobile.com/#/study/course/detail/subject-course/c2/6/s1'
+    with patch.object(adapter_module, 'Browser', B), \
+            patch.object(adapter_module, 'prepare', lambda browser, config: P()), \
+            patch.object(adapter_module.engine, 'is_login_wall', lambda page: False), \
+            patch.object(adapter_module.time, 'sleep', lambda seconds: None):
+        data = adapter_module.plan(B(None), load_config(data_dir=tmp_path, env={}), [url1, url2], rate=1.5)
+    assert [c['minutes'] for c in data['courses']] == [80, 45]
+    assert data['total_seconds'] == 7500
+    assert data['total_seconds_at_rate'] == 5000
+    assert data['missing'] == []

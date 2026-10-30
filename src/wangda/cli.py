@@ -16,7 +16,7 @@ import psutil
 
 from . import __version__, auth, engine
 from .adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, browser_login,
-                      claim_certificate, inspect, validate_url)
+                      claim_certificate, inspect, plan, validate_url)
 from .browser import Browser, discover_browser
 from .config import load_config
 from .runner import Runner
@@ -148,7 +148,7 @@ def parser():
     result.add_argument('--version', action='version', version=__version__)
     add_common(result)
     commands = result.add_subparsers(dest='command', required=True)
-    for name in ('doctor', 'login', 'auth', 'inspect', 'certificate', 'run', 'resume', 'status', 'pause', 'stop',
+    for name in ('doctor', 'login', 'auth', 'inspect', 'plan', 'certificate', 'run', 'resume', 'status', 'pause', 'stop',
                  'logs', 'skill-path'):
         sub = commands.add_parser(name)
         add_common(sub)
@@ -161,6 +161,9 @@ def parser():
                              help='Read the SMS code from stdin instead of a no-echo prompt')
         if name == 'inspect':
             sub.add_argument('url')
+        if name == 'plan':
+            sub.add_argument('urls', nargs='+')
+            sub.add_argument('--rate', type=float, default=1.5)
         if name == 'certificate':
             sub.add_argument('url')
             sub.add_argument('--download', metavar='DIR', default=None)
@@ -300,6 +303,12 @@ def main(argv=None):
                 emit({'status': 'ready', 'source': 'browser',
                       'expires_in': session['expires_in'],
                       'session': str(config.data_dir / auth.SESSION_FILE)})
+        elif args.command == 'plan':
+            urls = [validate_url(url) for url in args.urls]
+            if args.rate not in (1.0, 1.2, 1.5):
+                raise ValueError('rate must be one of 1.0, 1.2, 1.5')
+            with exclusive(config):
+                emit({'status': 'ok', 'data': plan(Browser(config), config, urls, rate=args.rate)})
         elif args.command == 'inspect':
             validate_url(args.url)
             with exclusive(config):
