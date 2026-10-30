@@ -203,6 +203,16 @@ def verify_session(session, host='https://wangda.chinamobile.com', timeout=15, o
         return 'unknown'
 
 
+def _enforce_posix_private_mode():
+    """Whether the 0600 contract can be enforced on this host.
+
+    Windows has no ``os.fchmod`` and its ``st_mode`` always carries group/other
+    bits, so the write must skip the chmod and the read must skip the check.
+    Access on Windows is governed by ACLs instead.
+    """
+    return os.name != 'nt'
+
+
 def is_fresh(session, margin=60):
     expires_in = session.get('expires_in')
     if not isinstance(expires_in, (int, float)) or not session.get('obtained_at'):
@@ -216,7 +226,8 @@ def write_private_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, name = tempfile.mkstemp(prefix='.' + path.name, suffix='.tmp', dir=path.parent)
     try:
-        os.fchmod(fd, 0o600)
+        if _enforce_posix_private_mode():
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
             json.dump(value, handle, ensure_ascii=False)
             handle.write('\n')
@@ -232,7 +243,7 @@ def read_session(path):
     path = Path(path)
     if not path.exists():
         return None
-    if stat.S_IMODE(path.stat().st_mode) & 0o077:
+    if _enforce_posix_private_mode() and stat.S_IMODE(path.stat().st_mode) & 0o077:
         raise AuthError('session file is readable by others; chmod 600 it first')
     value = json.loads(path.read_text(encoding='utf-8'))
     return value if value.get('access_token') else None

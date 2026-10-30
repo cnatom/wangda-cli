@@ -136,3 +136,28 @@ def test_read_session_refuses_world_readable_file(tmp_path):
 def test_mask_phone_hides_the_middle():
     assert auth.mask_phone('13800001234') == '138****1234'
     assert auth.mask_phone('') == '***'
+
+
+def test_write_private_json_survives_hosts_without_posix_modes(tmp_path, monkeypatch):
+    """Windows has no os.fchmod; the write must still land and round-trip."""
+    monkeypatch.setattr(auth, '_enforce_posix_private_mode', lambda: False)
+
+    def no_fchmod(fd, mode):
+        raise PermissionError('os.fchmod is not available on this host')
+
+    monkeypatch.setattr(auth.os, 'fchmod', no_fchmod, raising=False)
+    path = auth.write_private_json(tmp_path / auth.SESSION_FILE,
+                                   {'access_token': 'tok', 'token_type': 'Bearer',
+                                    'expires_in': 60, 'obtained_at': 0})
+    assert auth.read_session(path)['access_token'] == 'tok'
+    assert not list(tmp_path.glob('*.tmp'))
+
+
+def test_read_session_skips_posix_mode_check_without_posix_modes(tmp_path, monkeypatch):
+    """On Windows st_mode always carries group/other bits, so the 0600 test is noise."""
+    path = tmp_path / auth.SESSION_FILE
+    path.write_text(json.dumps({'access_token': 'tok'}))
+    os.chmod(path, 0o644)
+    monkeypatch.setattr(auth, '_enforce_posix_private_mode', lambda: False)
+    assert auth.read_session(path)['access_token'] == 'tok'
+
