@@ -234,7 +234,7 @@ def course_url(course_id, subject_id):
 
 CREDIT_WAIT_S = 600
 
-TOTAL_RE = re.compile(r"课程总时长\s*(?:(\d+)\s*小时)?\s*(?:(\d+)\s*分钟)?")
+TOTAL_RE = re.compile(r"课程总时长\s*[:：]?\s*(?:(\d+)\s*小时)?\s*(?:(\d+)\s*分钟)?")
 
 def all_sections_done(stat):
     """每节可见状态都标注「已完成」。部分课程页没有 X/Y 计数器，这是唯一可见依据。"""

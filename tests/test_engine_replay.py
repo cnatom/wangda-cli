@@ -195,6 +195,9 @@ class ReloadCooldownTests(unittest.TestCase):
 class CourseTotalTests(unittest.TestCase):
     def test_parses_hours_minutes_and_minutes_only(self):
         self.assertEqual(wanda.course_total_minutes("课程总时长 3小时38分钟"), 218)
+        # 线上实际渲染带冒号，且夹在「上线时间: … 课程总时长: 1小时47分钟」里
+        self.assertEqual(wanda.course_total_minutes("上线时间: 2022-11-24 课程总时长: 1小时47分钟"), 107)
+        self.assertEqual(wanda.course_total_minutes("课程总时长：45分钟"), 45)
         self.assertEqual(wanda.course_total_minutes("课程总时长 45分钟"), 45)
         self.assertEqual(wanda.course_total_minutes("课程总时长 2小时"), 120)
         self.assertIsNone(wanda.course_total_minutes("没有这个字段"))
