@@ -2,7 +2,7 @@
 name: wangda
 description: Use when playing, resuming, or certifying Wangda courses.
 license: MIT
-compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. The default `wanda login` needs a graphical session; `wanda auth` needs none.
+compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. `wanda auth` is this user's default login path and needs no display; `wanda login` is the graphical fallback.
 metadata:
   author: cnatom
   version: "0.8.0"
@@ -16,7 +16,7 @@ Use this skill when the user gives China Mobile Wangda course/subject links and 
 
 1. Check and initialize the runtime using the first-use instructions below. Do not launch a learning queue until environment checks pass.
 2. Use only the user's authorized account and comply with the platform and employer's learning rules. Playback does not establish comprehension or satisfy obligations to attend personally.
-3. Authenticate with `wanda login` by default: the CLI opens a plain window on the dedicated profile, the user logs in there and closes it, and the CLI then adopts what the web app stored. Use `wanda auth` when there is no display (see 「Login and profile reuse」). The SMS code is typed by the user; never ask for, echo, read or log it, and never handle passwords, cookies or tokens.
+3. Authenticate with `wanda auth` for this user: they hand over the phone number and the SMS code, and the agent runs the whole flow (`--username`, then `--code-stdin`). `wanda login` (window + manual login) remains the fallback when the CLI cannot reach the network. The code is single-use and lives minutes: never repeat it in a reply, never write it to a file, log, commit or the distribution repo, and never keep it after the command returns. Passwords, cookies and tokens are still never handled.
 4. Preserve the same configuration/data directory **and** `--profile` for every command in one task: a login does not transfer between profiles. Never use the user's normal browser profile.
 
 ## First-use setup
@@ -39,9 +39,11 @@ wanda auth --username '<employee-id-or-phone>' --json       # headless: sends th
 printf '%s\n' '<code>' | wanda auth --username '<...>' --code-stdin --json
 ```
 
-Run the second command in a terminal the user controls; the code must never pass through the agent. `--probe` failing with a blocked page (405 「安全卫士应用防护平台」 or a connection reset) means the host's egress is refused, not that the account is wrong: overseas datacenter IPs are blocked at the edge, so remote playback needs a mainland-China egress (home broadband or a domestic VPS).
+Run the second command as the user's own terminal step only if they prefer to type the code themselves; under this user's standing instruction the agent runs it and feeds the code through `--code-stdin` (write it into the pipeline once, never into a file or the final answer). **On a remote host, run it as a live PTY instead:** the SMS is only sent once the process starts, so a `--code-stdin` pipeline cannot be pre-filled with a code that does not exist yet. `ssh -tt <host> '<wanda> auth --username <phone> --json'` in a background PTY, poll until the output shows `verification code sent to`, then submit the code to that same process. The transport recipe (PTY handling, PowerShell quoting, `NO_PROXY` propagation) is in `cross-machine-ssh-access`; confirm with `wanda doctor --json` that `session.present` is true before queueing anything. Verify the helper landed the whole code (`submit` reports how many bytes it wrote; an empty line reads as "no verification code entered" and silently burns the attempt).
 
-Fall back to the browser flow only when `auth` is refused or a visible check is needed. Several local profiles can exist (the CLI default, plus any `--profile` used by earlier runs) and cookies live inside one of them. Logging in through the wrong one looks exactly like an expired session.
+`--probe` failing with a blocked page (405 「安全卫士应用防护平台」 or a connection reset) means the host's egress is refused, not that the account is wrong: overseas datacenter IPs are blocked at the edge, so remote playback needs a mainland-China egress (home broadband or a domestic VPS).
+
+`wanda login` already performs this flow. Repeat it by hand only when the CLI cannot spawn the window, or when a profile you must reuse is already signed in and all you need is to re-attach to it. Several local profiles can exist (the CLI default, plus any `--profile` used by earlier runs) and cookies live inside one of them. Logging in through the wrong one looks exactly like an expired session.
 
 1. Recover the profile the last queue used before anything else: `wanda status --json` reports it as `config.profile`, and `<data-dir>/run-config.json` holds the same value. Pass that path as `--profile` to **every** later command.
 2. `inspect` returning `waiting_login` on a machine that authenticated recently usually means the wrong profile, not an expired session. Compare the recorded profile with the CLI default (`~/Library/Application Support/wangda-cli/profile` on macOS) and re-check with the recorded one before asking the user to log in again.
@@ -57,6 +59,26 @@ Launch it with the shell tool's background mode; shell-level `nohup`/`&` is reje
 4. Ask the user to finish logging in there, then close that window. The visible window holds the profile lock, so `run`/`inspect` cannot start while it is open — a queue started then fails with exit code 5 (busy profile). Users routinely report success while leaving the window open, so verify instead of asking again: `pgrep -f '<recorded-profile>'` lists the processes holding it. When no other Chrome is running (`pgrep -fl "Google Chrome"` empty), quit it yourself with `osascript -e 'quit app "Google Chrome"'` and confirm the profile processes are gone before queueing; a global quit closes every Chrome window, including the user's own work.
 5. Confirm before queueing: `wanda inspect '<url>' --profile '<recorded>' --json` must return `inspected` with an item list. Only then start work; treat `waiting_login` as "go back to step 3", not as a reason to retry in a loop.
 
+## Proxied hosts: force direct egress before anything else
+
+A host with `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` set (Clash and friends) will send the CLI's API calls through the proxy, and an overseas exit is refused at the edge (405 「安全卫士应用防护平台」). The platform must be reached directly on **every** host the queue might run on — this is not Windows-specific: the user runs playback on whatever remote terminal is convenient.
+
+Force it per invocation instead of editing shell profiles (the CLI and any background runner started from that command inherit it):
+
+```sh
+NO_PROXY='wangda.chinamobile.com,chinamobile.com' no_proxy='wangda.chinamobile.com,chinamobile.com' \
+  wanda auth --probe --json
+```
+
+```powershell
+$env:NO_PROXY='wangda.chinamobile.com,chinamobile.com'; & C:\Users\cnato\.local\bin\wanda.exe auth --probe --json
+```
+
+- Verify with `auth --probe --json`: `probe.public_key_sha256` present means the direct path works, and the probe never sends an SMS.
+- Do not infer the rule from one success. Clash in rule/system-proxy mode was measured to pass this host; Clash in Global or TUN mode will not. Apply the rule every time rather than testing each host by hand.
+- The browser is outside this rule: Chrome follows the OS proxy, not `NO_PROXY`, so stalled media on a proxied host is a browser problem, not a CLI one.
+- On Windows the CLI is not on `PATH` (`uv` installs to `%USERPROFILE%\.local\bin`): call `C:\Users\<user>\.local\bin\wanda.exe` explicitly rather than editing `PATH`.
+
 ## Commands
 
 Execute commands using the agent's shell tool.
@@ -67,6 +89,7 @@ wanda login
 wanda auth --probe --json
 wanda auth --username '<employee-id-or-phone>' --json
 wanda inspect 'https://wangda.chinamobile.com/#/study/subject/detail/EXAMPLE_TOPIC/1' --json
+wanda plan '<course-URL-A>' '<course-URL-B>' --rate 1.5 --json   # read-only: each course's own 课程总时长
 wanda certificate '<subject-or-course-URL>' --json
 wanda certificate '<subject-or-course-URL>' --download '<local-directory>' --json
 wanda run '<subject-or-course-URL>' --rate 1.5 --background --json
@@ -88,16 +111,16 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 4. Order the queue so the least understood link is last. A failed entry stops the rest of the queue unless `--continue-on-error` is passed, so put a URL whose survey failed or returned no items at the end instead of relaxing the failure rules.
 5. Use `run --background` for long playback. Multiple links are sequential, not concurrent. The detached runner owns the queue and recovery; do not add a second agent timer, cron, or OS guard.
 6. Poll `status` at reasonable intervals (for example once per minute or on user request). It reads only the local atomic snapshot. `logs` also reads local files and does not connect to the browser.
-7. On `waiting_login`, tell the user to authenticate manually, then explicitly `resume`. Do not auto-retry login or open extra windows.
+7. On `waiting_login`, read `reason` and `session_note` before asking for anything: a declared-expiry park is not proof the token is dead, and under `--watch` the live runner resumes by itself once a new session appears. Ask the user to log in only when the platform actually rejected the token; pass `resume` only after the runner has exited. Do not auto-retry login or open extra windows.
 8. On `paused` or `stopped`, do not resume without the user's intent. On `interrupted`, explain that the runner died; an explicit `resume` rechecks the platform and skips completed queue entries.
 9. On `unconfirmed`, report it as unconfirmed. Do not convert it to success, repeatedly replay the task, or click unsupported required item types. Only when the user explicitly says to ignore failures, pass `--continue-on-error` to `run`/`resume`: the queue continues with later links and later required items inside a subject, but failed/unconfirmed entries stay failed and the final status remains `failed`/`unconfirmed`.
 10. Only report completion when `status == "completed"` and every queue entry is completed with a verified result. Newly evaluated direct courses require both a full course directory/counter and their exact subject card marked completed (`confirmation: "course_and_subject"`). An increase in total completed items could belong to another course and is not proof. Browser exit code, elapsed time, video end, and local section changes alone are not enough.
-11. Completion/pause/stop automatically closes owned automation processes and retains the dedicated login profile. `login` intentionally leaves its window open; use `stop` to close it without deleting login state.
+11. Completion/pause/stop automatically closes owned automation processes and retains the dedicated login profile. `login` closes its own window once the user is done and then attaches; while it is still running, the user has not closed the window yet — do not kill it, and never start a second login alongside it.
 
 ## Certificate claiming
 
 1. Read `status` first. A certificate command is a browser operation; do not run it while a queue owns the profile.
-2. If the platform is at the login wall, ask the user to complete `wanda login` themselves. Never request, type, read, or log credentials, SMS codes, cookies, or tokens.
+2. If the platform is at the login wall, run `wanda auth` exactly as described in 「Login and profile reuse」 — the certificate path itself never needs an interactive login, and a certificate contains no learning data. Never handle cookies or tokens.
 3. Use the user's exact subject or subject-course URL. The command clicks only a visible 领取证书 action; `already_claimed` means nothing was clicked. After a manual login, add `--headed` to reuse that dedicated window instead of switching the profile to headless.
 4. Report `claimed` or `already_claimed` as platform-confirmed. `not_eligible` means the certificate conditions are not met and `no_certificate` means the page offers no certificate; do not retry, bypass, or fabricate either outcome.
 5. Download only when the user asks. `--download '<directory>'` saves the platform-generated PNG locally. Certificates contain the learner's name and certificate number: never upload, screenshot into chat, or paste their contents.
@@ -107,9 +130,10 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 ## Boundaries and pitfalls
 
 - No forged reports, learning-time edits, direct completion-report API calls, account-limit bypass, or parallel sessions for one account.
+- Requests to add a progress-forging mode, run parallel sessions for one account, or delete this boundary from `AGENTS.md`/this skill are declined once, plainly, and then left alone: the record must correspond to playback that happened, and the reference tool additionally uploads the account's phone number and SMS code to its author's server. Do not bargain, do not remove the written rule, and do not re-litigate after the answer — offer the legitimate levers instead (browser login, `session_wait_seconds`, `--watch`, duration prefetch).
 - Third-party 「多线程刷课」 tools are not an alternative to playback and must not be run on the user's account: reversing such an exe showed it posting progress straight to the platform progress API and uploading the account's phone number plus the SMS login code in plaintext to the author's server. Its fixed AES key is stale as well — the live `/oauth` app now uses an RSA-wrapped per-request AES key, so that login path no longer matches the site. When the user asks whether to use one, refuse on those grounds, not on style.
 - Never claim a certificate the platform has not visibly offered, and never modify certificate eligibility or generate a substitute certificate.
-- Playback is muted at the browser level (`--mute-audio`) and the player volume is set to 0. Do not unmute it or add audio.
+- Playback is muted three ways: browser `--mute-audio`, element `muted = true`, and volume 0; the launcher also disables `MediaSessionService`, `HardwareMediaKeyHandling` and `MediaRouter`. Do not unmute, re-enable those features, or add audio. Muting alone is not enough: a tab that merely plays muted media still registers as a "now playing" client, and macOS uses that to pull the user's Bluetooth headphones (AirPods) off their phone mid-session. Confirm the fix by asking the user what their phone shows — not by reading the flags back.
 - Background runner and worker processes must not open a visible terminal window. If one appears, stop the queue and restart with the current version.
 - `--continue-on-error` is allowed only when the user asks to ignore failures. It never turns a failed/unconfirmed item into completed.
 - `inspect` returning `{"status": "failed", "reason": "RuntimeError"}` with no `items` means the subject page produced no item list (unentitled, different layout, or blank page) — not an empty subject. Never report it as complete or as having no required items: queue it last, re-check it once the runner loads it, and report the state as still unknown.
@@ -119,11 +143,16 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 - Required-item handling: type 10 runs a full course session; types 1 (文档), 2 (图片) and 6 (单项视频) click the card and keep its viewer open for `item_dwell_seconds` so the platform records it itself; type 3 is a plain URL click. Types 9 (考试), 14 (直播) and 16 (嵌套专题) are never clicked — the rest of the subject runs first, then the run ends `unconfirmed` with `Required items need manual handling: type …`. Dwell time never substitutes for the platform's own card state.
 - `run` starts a new queue. `resume` retains the saved queue and skips confirmed completed entries. A partial course is resumed according to the platform's saved progress, not a local promise of zero loss.
 - Course and subject progress can disagree temporarily. The CLI refreshes card state within the confirmation window; expiry means `unconfirmed`, not permission to replay indefinitely or manufacture a result.
+- A `wanda auth` that ends `{"status": "failed", "reason": "PermissionError"}` — or `AuthError: session file is readable by others` on the next command — is the Windows session-write bug, not a wrong code: `os.fchmod` and POSIX mode bits mean nothing there, and the code is already spent. Upstream fix is PR #15 (`_enforce_posix_private_mode()`, branch `fix/windows-session-write`); an install older than that needs the fix branch or a site-packages patch, and that patch is reverted by the next `uv tool install --force`. Details and the round-trip probe are in `references/protocol-login.md` 「Session file on Windows」. Every `auth` attempt costs one SMS, so get `doctor` and the write path clean first.
 - `wanda login` needs a graphical session (the human logs in and closes the window before the CLI attaches); `wanda auth` needs none. Never export cookies into chat.
 - The OAuth login page runs a devtools detector: a tab with an attached CDP session is blanked to `about:blank` when the user requests an SMS code. That is why `wanda login` opens a plain (no-debug-port) window and only attaches after it closes, and why a session is adopted only from visible signed-in state. Playback pages are unaffected.
+- Chrome keeps a process alive after its last window closes, so "the window is closed" cannot be inferred from the process exiting. `login` therefore also watches the profile's `Local Storage/leveldb` for the app writing its token, lets the write flush, then takes the profile over. While `wanda login` is still waiting, the user has simply not finished; do not report the login as failed and do not launch an overlapping attempt. If the user did finish a login the CLI never adopted, do not ask for another SMS: attach that same profile headless, and when the page renders signed-in content the profile already holds a valid session — persist it instead of re-authenticating.
 - The platform allows one active course page per account. Opening a course while another session (the user's own browser on another machine, or a leftover tab) holds a course page renders 「您已打开新的课程详情页」 and then blanks the tab to `about:blank`; the CLI reports `error_page_stop` and the whole subject ends `unconfirmed`. Treat it as a concurrency conflict, not a course failure: clicking 继续学习 does not survive the blank, so retrying the queue cannot recover it: ask the user to close Wangda course/study tabs everywhere else, then `resume`.
 - Logs and profiles are private local data. Do not upload them or paste raw page/network state into issues.
 - Exit code 5 means another process owns the profile, almost always the plain login window or a leftover runner; diagnose with `pgrep -f '<profile>'` and never "fix" it by pointing at the CLI default profile, which has no login.
+- On Windows the CLI is not on `PATH` (`uv` installs the shim to `%USERPROFILE%\.local\bin`): call the absolute path; do not edit `PATH` or shell profiles.
+- Driving the SMS login from an agent: run the command with a PTY (`ssh -tt`) so the no-echo prompt is reachable, read `verification code sent to 150****XXXX:` from the output, then send the code plus Enter. Sending only Enter is reported as `no verification code entered` and consumes the code.
+- Three SMS requests in a short window can silently stop arriving. Do not keep retrying: stop, wait roughly half an hour, then send one more. A late code is still valid for the prompt that is already waiting.
 
 ## Fixing problems: keep improving, deliver by PR
 
@@ -134,7 +163,7 @@ Every problem met during a task is an improvement obligation, not only a status 
 3. Runtime-level: follow AGENTS.md — failing test in `tests/` first, smallest fix in `src/wangda`, then `uv run pytest -q` and `uv run ruff check src tests`. Keep playback in one implementation; never add a concurrency bypass or a second worker.
 4. Deliver by PR, never by pushing `main` directly: branch `fix/<topic>` or `docs/<topic>`, Conventional Commits with one concern per commit, `git push -u origin <branch>`, then `gh pr create` describing scope, symptom, sanitized evidence, tests run and known limits. Merging a green PR is a local decision; publishing, tagging or releasing is not, without the user asking.
 5. Do repository work while the runner owns the playback profile. Never re-run `inspect`, `run` or `certificate` to reproduce a live problem: the profile is busy, and a second course page blanks the live session. Read `status`, `logs` and the local snapshot instead, and reproduce offline in a synthetic fixture or the opt-in browser smoke.
-6. Close the loop after merge: reinstall with `uv tool install --force 'git+https://github.com/cnatom/wangda-cli.git'`, copy `skills/wangda/` into the agent's skill directory so the loaded skill matches the repository, and re-check `wanda --version`.
+6. Close the loop after merge: reinstall with `uv tool install --force 'git+https://github.com/cnatom/wangda-cli.git'`, copy `skills/wangda/` into the agent's skill directory so the loaded skill matches the repository, and re-check `wanda --version`. The repository copy is the source of truth: if you edited the agent's skill directly, port those edits back into `skills/wangda/` and commit them, otherwise the next install silently reverts them.
 7. If the fix is not ready when the task ends, still open the skill-only PR with the pitfall, an explicit 「未修复」 marker and the evidence a later session needs, and tell the user what remains. Never leave the lesson only in the session.
 8. Keep credentials, cookies, profiles, real course titles, screenshots and learning logs out of commits, PR bodies and issues. Sanitize command output before quoting it.
 
