@@ -153,3 +153,37 @@ def test_runner_creationflags_hide_console_on_windows():
         return
     assert RUNNER_CREATIONFLAGS & subprocess.CREATE_NO_WINDOW
     assert RUNNER_CREATIONFLAGS & subprocess.CREATE_NEW_PROCESS_GROUP
+
+
+def test_status_carries_a_one_glance_progress_block(tmp_path, capsys):
+    store = Store(tmp_path)
+    store.write({'status': 'running', 'run_id': 'a' * 32, 'pass': 1,
+                 'session_note': 'declared_expired_but_accepted',
+                 'last_event': {'ev': 'tick', 'prog': '完成 4 节/共 5 节',
+                                'v': {'cur': 421, 'dur': 900, 'rate': 1.5}},
+                 'queue': [
+                     {'url': 'https://wangda.chinamobile.com/#/study/course/detail/subject-course/c1/6/s1',
+                      'status': 'completed'},
+                     {'url': 'https://wangda.chinamobile.com/#/study/course/detail/subject-course/c2/6/s1',
+                      'status': 'running'},
+                     {'url': 'https://wangda.chinamobile.com/#/study/course/detail/subject-course/c3/6/s1',
+                      'status': 'unconfirmed'},
+                     {'url': 'https://wangda.chinamobile.com/#/study/course/detail/subject-course/c4/6/s1',
+                      'status': 'pending'}]})
+    assert main(['status', '--data-dir', str(tmp_path), '--json']) == 0
+    data = json.loads(capsys.readouterr().out)
+    progress = data['progress']
+    assert (progress['completed'], progress['total'], progress['percent']) == (1, 4, 25.0)
+    assert (progress['running'], progress['unconfirmed'], progress['pending']) == (1, 1, 1)
+    assert progress['current']['course'] == 'c2'
+    assert progress['current']['position'] == 421
+    assert progress['current']['sections'] == '完成 4 节/共 5 节'
+    assert progress['session_note'] == 'declared_expired_but_accepted'
+    assert progress['pass'] == 1
+
+
+def test_idle_status_reports_zero_progress(tmp_path, capsys):
+    assert main(['status', '--data-dir', str(tmp_path), '--json']) == 0
+    progress = json.loads(capsys.readouterr().out)['progress']
+    assert progress == {'completed': 0, 'total': 0, 'pending': 0, 'running': 0,
+                        'unconfirmed': 0, 'failed': 0, 'percent': 0.0}

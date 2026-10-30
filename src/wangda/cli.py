@@ -37,12 +37,43 @@ def owner_alive(state):
         return False
 
 
+def progress_of(state):
+    """One-glance progress: counts, the course being played, and whether login is needed."""
+    queue = state.get('queue') or []
+    counts = {}
+    for item in queue:
+        name = item.get('status') or 'unknown'
+        counts[name] = counts.get(name, 0) + 1
+    total = len(queue)
+    done = counts.get('completed', 0)
+    block = {'completed': done, 'total': total, 'pending': counts.get('pending', 0),
+             'running': counts.get('running', 0), 'unconfirmed': counts.get('unconfirmed', 0),
+             'failed': counts.get('failed', 0),
+             'percent': round(done * 100.0 / total, 1) if total else 0.0}
+    current = next((item for item in queue if item.get('status') == 'running'), None)
+    if current:
+        last = state.get('last_event') or {}
+        view = last.get('v') or {}
+        url = current.get('url') or ''
+        course = (url.split('/subject-course/')[-1].split('/')[0]
+                  if '/subject-course/' in url else url.rsplit('/', 1)[-1])
+        block['current'] = {'course': course, 'url': url,
+                            'position': view.get('cur'), 'duration': view.get('dur'),
+                            'rate': view.get('rate'), 'sections': last.get('prog')}
+    if state.get('pass'):
+        block['pass'] = state['pass']
+    if state.get('session_note'):
+        block['session_note'] = state['session_note']
+    return block
+
+
 def snapshot(store):
     state = store.read()
     if state['status'] == 'running':
         state['owner_alive'] = owner_alive(state)
         if not state['owner_alive']:
             state['status'] = 'interrupted'
+    state['progress'] = progress_of(state)
     return state
 
 
