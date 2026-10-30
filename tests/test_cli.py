@@ -185,5 +185,50 @@ def test_status_carries_a_one_glance_progress_block(tmp_path, capsys):
 def test_idle_status_reports_zero_progress(tmp_path, capsys):
     assert main(['status', '--data-dir', str(tmp_path), '--json']) == 0
     progress = json.loads(capsys.readouterr().out)['progress']
-    assert progress == {'completed': 0, 'total': 0, 'pending': 0, 'running': 0,
-                        'unconfirmed': 0, 'failed': 0, 'percent': 0.0}
+    assert {k: v for k, v in progress.items() if k != 'eta'} == {
+        'completed': 0, 'total': 0, 'pending': 0, 'running': 0,
+        'unconfirmed': 0, 'failed': 0, 'percent': 0.0}
+    assert progress['eta'] is None
+
+
+def _state_with_queue(tmp_path, statuses):
+    store = Store(tmp_path)
+    urls = [f'https://wangda.chinamobile.com/#/study/course/detail/subject-course/c{i}/6/s1'
+            for i in range(len(statuses))]
+    store.write({'status': 'running', 'run_id': 'b' * 32,
+                 'last_event': {'ev': 'tick', 'v': {'cur': 300, 'dur': 900, 'rate': 1.5}},
+                 'queue': [{'url': u, 'status': s} for u, s in zip(urls, statuses)]})
+    return store
+
+
+def test_eta_uses_the_runs_own_observed_pace(tmp_path, capsys):
+    _state_with_queue(tmp_path, ["completed", "completed", "running", "pending", "pending"])
+    logs = tmp_path / 'logs'
+    logs.mkdir()
+    events = []
+    for i, seconds in enumerate((600, 300)):
+        events.append({'ev': 'course_start', 'course': f'c{i}', 't': 1000 + i * 1000})
+        events.append({'ev': 'course_done', 'course': f'c{i}', 't': 1000 + i * 1000 + seconds})
+    (logs / f"events-{'b' * 32}.jsonl").write_text('\n'.join(json.dumps(e) for e in events) + '\n')
+    assert main(['status', '--data-dir', str(tmp_path), '--json']) == 0
+    eta = json.loads(capsys.readouterr().out)['progress']['eta']
+    # 当前这门剩 (900-300)/1.5 = 400 秒；两门待跑按观测均值 450 秒算 → 400 + 900 = 1300
+    assert eta['seconds_per_course'] == 450
+    assert eta['sample'] == 2
+    assert eta['remaining_courses'] == 2
+    assert eta['eta_seconds'] == 1300
+    assert eta['basis'] == 'observed_pace'
+    assert 'eta_at' in eta
+
+
+def test_eta_without_history_only_counts_the_current_course(tmp_path, capsys):
+    _state_with_queue(tmp_path, ['running', 'pending'])
+    assert main(['status', '--data-dir', str(tmp_path), '--json']) == 0
+    eta = json.loads(capsys.readouterr().out)['progress']['eta']
+    assert eta['eta_seconds'] == 400
+    assert eta['basis'] == 'current_course_only'
+
+
+def test_eta_is_absent_for_an_idle_queue(tmp_path, capsys):
+    assert main(['status', '--data-dir', str(tmp_path), '--json']) == 0
+    assert json.loads(capsys.readouterr().out)['progress'].get('eta') is None

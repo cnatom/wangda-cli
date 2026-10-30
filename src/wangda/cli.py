@@ -1,6 +1,7 @@
 """Stable JSON command-line interface for humans and local-execution agents."""
 import argparse
 from collections import deque
+import datetime
 import importlib.metadata
 import json
 import os
@@ -37,7 +38,62 @@ def owner_alive(state):
         return False
 
 
-def progress_of(state):
+def read_events(data_dir, state, tail):
+    """Recent events of the current run; used by `logs` and by the status ETA."""
+    run_id = state.get('run_id')
+    # Run ids are generated UUID hex; never accept arbitrary file paths from a snapshot.
+    if not run_id or len(run_id) != 32 or any(c not in '0123456789abcdef' for c in run_id):
+        return []
+    path = data_dir / 'logs' / f'events-{run_id}.jsonl'
+    if not path.exists():
+        return []
+    events = []
+    with path.open(encoding='utf-8') as handle:
+        for line in deque(handle, maxlen=tail):
+            try:
+                events.append(json.loads(line))
+            except ValueError:
+                pass
+    return events
+
+
+def course_spans(events):
+    """Observed wall-clock seconds per finished course, from course_start -> course_done."""
+    starts, spans = {}, []
+    for event in events:
+        name, course, moment = event.get('ev'), event.get('course'), event.get('t')
+        if not course or not isinstance(moment, (int, float)):
+            continue
+        if name == 'course_start':
+            starts[course] = moment
+        elif name == 'course_done' and course in starts:
+            spans.append(moment - starts.pop(course))
+    return spans
+
+
+def eta_of(state, events, progress):
+    """Estimate the remaining wall-clock time from this run's own observed pace."""
+    remaining = progress['pending']
+    current = progress.get('current') or {}
+    position, duration, rate = current.get('position'), current.get('duration'), current.get('rate') or 1.0
+    left_now = max(0.0, (duration - position) / rate) if isinstance(position, (int, float)) and duration else 0.0
+    spans = course_spans(events)
+    if not spans and not left_now:
+        return None
+    average = sum(spans) / len(spans) if spans else None
+    eta = left_now + (average * remaining if average else 0.0)
+    block = {'eta_seconds': int(round(eta)), 'remaining_courses': remaining,
+             'basis': 'observed_pace' if average else 'current_course_only'}
+    if average:
+        block['seconds_per_course'] = int(round(average))
+        block['sample'] = len(spans)
+    if eta:
+        finish = datetime.datetime.now().astimezone() + datetime.timedelta(seconds=eta)
+        block['eta_at'] = finish.isoformat(timespec='minutes')
+    return block
+
+
+def progress_of(state, events=None):
     """One-glance progress: counts, the course being played, and whether login is needed."""
     queue = state.get('queue') or []
     counts = {}
@@ -64,16 +120,18 @@ def progress_of(state):
         block['pass'] = state['pass']
     if state.get('session_note'):
         block['session_note'] = state['session_note']
+    if events is not None:
+        block['eta'] = eta_of(state, events, block)
     return block
 
 
-def snapshot(store):
+def snapshot(store, events=None):
     state = store.read()
     if state['status'] == 'running':
         state['owner_alive'] = owner_alive(state)
         if not state['owner_alive']:
             state['status'] = 'interrupted'
-    state['progress'] = progress_of(state)
+    state['progress'] = progress_of(state, events)
     return state
 
 
@@ -195,7 +253,7 @@ def main(argv=None):
         config = load_config(config_file=values.get('config'), **overrides)
         store = Store(config.data_dir)
         if args.command == 'status':
-            emit(snapshot(store))
+            emit(snapshot(store, events=read_events(config.data_dir, store.read(), 5000)))
         elif args.command == 'skill-path':
             bundled = Path(__file__).resolve().parent / 'skill' / 'SKILL.md'
             source = Path(__file__).resolve().parents[2] / 'skills' / 'wangda' / 'SKILL.md'
@@ -273,20 +331,8 @@ def main(argv=None):
             if not 1 <= args.tail <= 10000:
                 raise ValueError('tail must be 1..10000')
             state = store.read()
-            run_id = state.get('run_id')
-            # Run ids are generated UUID hex; never accept arbitrary file paths from a snapshot.
-            if run_id and (len(run_id) != 32 or any(c not in '0123456789abcdef' for c in run_id)):
-                raise ValueError('Invalid saved run id')
-            path = config.data_dir / 'logs' / f'events-{run_id}.jsonl'
-            events = []
-            if run_id and path.exists():
-                with path.open(encoding='utf-8') as handle:
-                    for line in deque(handle, maxlen=args.tail):
-                        try:
-                            events.append(json.loads(line))
-                        except ValueError:
-                            pass
-            emit({'status': 'ok', 'run_id': run_id, 'events': events})
+            emit({'status': 'ok', 'run_id': state.get('run_id'),
+                  'events': read_events(config.data_dir, state, args.tail)})
         return 0
     except Timeout:
         emit({'status': 'busy', 'detail': 'A runner or browser operation owns this data directory/profile'})

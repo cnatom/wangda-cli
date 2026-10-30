@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. The default `wanda login` needs a graphical session; `wanda auth` needs none.
 metadata:
   author: cnatom
-  version: "0.7.3"
+  version: "0.7.4"
 ---
 
 # Wangda real playback
@@ -102,7 +102,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 4. Report `claimed` or `already_claimed` as platform-confirmed. `not_eligible` means the certificate conditions are not met and `no_certificate` means the page offers no certificate; do not retry, bypass, or fabricate either outcome.
 5. Download only when the user asks. `--download '<directory>'` saves the platform-generated PNG locally. Certificates contain the learner's name and certificate number: never upload, screenshot into chat, or paste their contents.
 
-- `wanda status` already answers "how far along is it" in one command: `progress.completed` / `total` / `percent`, per-status counts, `progress.current` (course id, `position` / `duration`, `rate`, `sections` counter), `pass`, and `session_note`. Read those fields instead of re-deriving counts with ad-hoc scripts or scraping the event log.
+- `wanda status` already answers "how far along is it" in one command: `progress.completed` / `total` / `percent`, per-status counts, `progress.current` (course id, `position` / `duration`, `rate`, `sections` counter), `pass`, `session_note`, and `eta` (estimated remaining wall-clock time from this run's own observed course pace plus the current course's remaining position; `basis` says whether it had history). `eta` excludes `unconfirmed` entries — they wait for the next watch pass. Read those fields instead of re-deriving counts with ad-hoc scripts or scraping the event log.
 
 ## Boundaries and pitfalls
 
