@@ -15,8 +15,13 @@ import websocket
 ANTI_FREEZE = [
     '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding',
-    '--disable-features=CalculateNativeWinOcclusion,TabFreeze,ProactiveTabFreezeAndDiscard',
 ]
+# Keep the browser awake, but never claim the system's "now playing" session: macOS uses it to
+# pull Bluetooth headphones (AirPods) away from other devices even when the tab is muted.
+FEATURES = ','.join([
+    'CalculateNativeWinOcclusion', 'TabFreeze', 'ProactiveTabFreezeAndDiscard',
+    'MediaSessionService', 'HardwareMediaKeyHandling', 'MediaRouter',
+])
 
 
 def discover_browser(explicit=None):
@@ -164,7 +169,8 @@ class Browser:
         args = [executable, f'--user-data-dir={self.config.profile}',
                 f'--remote-debugging-port={self.config.port}', '--remote-debugging-address=127.0.0.1',
                 '--no-first-run', '--no-default-browser-check', '--window-size=1280,900',
-                '--autoplay-policy=no-user-gesture-required', '--mute-audio', *ANTI_FREEZE]
+                '--autoplay-policy=no-user-gesture-required', '--mute-audio', *ANTI_FREEZE,
+                f'--disable-features={FEATURES}']
         if not headed:
             args += ['--headless=new']
         args += ['about:blank']
@@ -193,7 +199,8 @@ class Browser:
         (self.config.profile / 'DevToolsActivePort').unlink(missing_ok=True)
         args = [executable, f'--user-data-dir={self.config.profile}',
                 '--no-first-run', '--no-default-browser-check', '--window-size=1280,900',
-                '--autoplay-policy=no-user-gesture-required', '--mute-audio', *ANTI_FREEZE]
+                '--autoplay-policy=no-user-gesture-required', '--mute-audio', *ANTI_FREEZE,
+                f'--disable-features={FEATURES}']
         if not headed:
             args += ['--headless=new']
         args += [url]

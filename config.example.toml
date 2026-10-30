@@ -14,6 +14,7 @@ watch = false             # true: 跑完一轮继续复查/重试，直到每个
 watch_interval = 1800     # 两轮之间等多久再复查（秒）
 watch_max_passes = 6      # 最多复查几轮，超了按最后一轮状态收尾
 session_wait_seconds = 21600  # watch 模式下等新 token 的最长时间（秒）
+plan_durations = true      # 开跑前逐门读取「课程总时长」并缓存；--no-plan-durations 可关
 # data_dir = "./.runtime"  # Relative paths resolve against the command's working directory
 # profile = "./.runtime/profile"  # Dedicated profile ONLY; never your everyday Chrome data
 # browser = "/path/to/chrome"

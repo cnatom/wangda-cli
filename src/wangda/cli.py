@@ -14,7 +14,7 @@ import uuid
 from filelock import Timeout
 import psutil
 
-from . import __version__, auth, engine
+from . import __version__, adapter, auth, durations, engine
 from .adapter import (CertificateUnavailable, LoginRequired, Unconfirmed, browser_login,
                       claim_certificate, inspect, plan, validate_url)
 from .browser import Browser, discover_browser
@@ -71,19 +71,35 @@ def course_spans(events):
     return spans
 
 
-def eta_of(state, events, progress):
-    """Estimate the remaining wall-clock time from this run's own observed pace."""
-    remaining = progress['pending']
+def eta_of(state, events, progress, cache=None):
+    """Remaining wall-clock time: exact lengths where recorded, the run's own pace elsewhere."""
+    cache = cache or {}
+    queue = state.get('queue') or []
+    pending = [item for item in queue if item.get('status') in ('pending', 'paused')]
     current = progress.get('current') or {}
-    position, duration, rate = current.get('position'), current.get('duration'), current.get('rate') or 1.0
+    saved_rate = (state.get('config') or {}).get('rate')
+    position, duration = current.get('position'), current.get('duration')
+    rate = current.get('rate') or saved_rate or 1.0
     left_now = max(0.0, (duration - position) / rate) if isinstance(position, (int, float)) and duration else 0.0
+    known, unknown = 0.0, 0
+    for item in pending:
+        _, course = engine.parse_url(item.get('url') or '')
+        value = durations.seconds_for(None, course, cache) if course else None
+        if value:
+            known += value
+        else:
+            unknown += 1
+    known_at_rate = known / rate if rate else known
     spans = course_spans(events)
-    if not spans and not left_now:
-        return None
     average = sum(spans) / len(spans) if spans else None
-    eta = left_now + (average * remaining if average else 0.0)
-    block = {'eta_seconds': int(round(eta)), 'remaining_courses': remaining,
-             'basis': 'observed_pace' if average else 'current_course_only'}
+    if not spans and not left_now and not known:
+        return None
+    eta = left_now + known_at_rate + (average * unknown if average else 0.0)
+    basis = 'measured_durations' if known and not unknown else (
+        'measured_plus_pace' if known else ('observed_pace' if average else 'current_course_only'))
+    block = {'eta_seconds': int(round(eta)), 'remaining_courses': progress['pending'],
+             'known_courses': len(pending) - unknown, 'unknown_courses': unknown,
+             'known_seconds_at_rate': int(round(known_at_rate)), 'basis': basis}
     if average:
         block['seconds_per_course'] = int(round(average))
         block['sample'] = len(spans)
@@ -93,7 +109,7 @@ def eta_of(state, events, progress):
     return block
 
 
-def progress_of(state, events=None):
+def progress_of(state, events=None, cache=None):
     """One-glance progress: counts, the course being played, and whether login is needed."""
     queue = state.get('queue') or []
     counts = {}
@@ -121,17 +137,17 @@ def progress_of(state, events=None):
     if state.get('session_note'):
         block['session_note'] = state['session_note']
     if events is not None:
-        block['eta'] = eta_of(state, events, block)
+        block['eta'] = eta_of(state, events, block, cache)
     return block
 
 
-def snapshot(store, events=None):
+def snapshot(store, events=None, cache=None):
     state = store.read()
     if state['status'] == 'running':
         state['owner_alive'] = owner_alive(state)
         if not state['owner_alive']:
             state['status'] = 'interrupted'
-    state['progress'] = progress_of(state, events)
+    state['progress'] = progress_of(state, events, cache)
     return state
 
 
@@ -172,6 +188,10 @@ def parser():
             sub.add_argument('urls', nargs='+')
         if name in ('run', 'resume'):
             sub.add_argument('--rate', type=float, default=None)
+            sub.add_argument('--plan-durations', action=argparse.BooleanOptionalAction, default=None,
+                             help='Read every course length before playback (default on)')
+            sub.add_argument('--refresh-durations', action='store_true',
+                             help='Ignore the duration cache and read the pages again')
             sub.add_argument('--headed', action=argparse.BooleanOptionalAction, default=None)
             sub.add_argument('--retries', type=int, default=None)
             sub.add_argument('--continue-on-error', action=argparse.BooleanOptionalAction, default=None)
@@ -187,6 +207,47 @@ def parser():
         if name == 'logs':
             sub.add_argument('--tail', type=int, default=20)
     return result
+
+
+def planned_course_urls(config, urls):
+    """Expand subject URLs into the course URLs this run will actually play."""
+    result = []
+    browser = None
+    for url in urls:
+        subject, course = engine.parse_url(url)
+        if course:
+            result.append(url)
+            continue
+        if not subject:
+            continue
+        browser = browser or Browser(config)
+        data = inspect(browser, config, url)
+        for item in data.get('items') or []:
+            if item.get('type') != adapter.VIDEO_ITEM or item.get('opt'):
+                continue
+            if (item.get('st') or '').strip().startswith('已完成'):
+                continue
+            result.append(engine.course_url(item['id'], subject))
+    return result
+
+
+def prefetch_durations(config, urls, rate, refresh=False):
+    """Read each course's own 「课程总时长」 before playback; cached values are reused forever."""
+    cache = durations.load(config.data_dir)
+    targets = []
+    for url in planned_course_urls(config, urls):
+        _, course = engine.parse_url(url)
+        if course and (refresh or not durations.seconds_for(None, course, cache)):
+            targets.append(url)
+    if not targets:
+        emit({'status': 'ok', 'detail': 'duration prefetch: nothing to fetch', 'cached': len(cache)})
+        return
+    data = plan(Browser(config), config, targets, rate=rate)
+    for item in data['courses']:
+        durations.remember(config.data_dir, item['course'], item['seconds'])
+    emit({'status': 'ok', 'detail': 'duration prefetch',
+          'fetched': len(data['courses']), 'missing': len(data['missing']),
+          'total_seconds_at_rate': data['total_seconds_at_rate']})
 
 
 def start_background(config, urls, resume):
@@ -249,14 +310,15 @@ def main(argv=None):
     values = vars(args)
     overrides = {key: values.get(key) for key in ('data_dir', 'profile', 'browser', 'port', 'rate',
                                                   'headed', 'retries', 'continue_on_error',
-                                                  'watch', 'watch_interval')}
+                                                  'watch', 'watch_interval', 'plan_durations')}
     old_sink = engine.EVENT_SINK
     engine.EVENT_SINK = lambda event: print(json.dumps(scrub(event), ensure_ascii=False), file=sys.stderr, flush=True)
     try:
         config = load_config(config_file=values.get('config'), **overrides)
         store = Store(config.data_dir)
         if args.command == 'status':
-            emit(snapshot(store, events=read_events(config.data_dir, store.read(), 5000)))
+            emit(snapshot(store, events=read_events(config.data_dir, store.read(), 5000),
+                          cache=durations.load(config.data_dir)))
         elif args.command == 'skill-path':
             bundled = Path(__file__).resolve().parent / 'skill' / 'SKILL.md'
             source = Path(__file__).resolve().parents[2] / 'skills' / 'wangda' / 'SKILL.md'
@@ -327,6 +389,9 @@ def main(argv=None):
                     raise ValueError('No saved queue to resume')
                 if saved.get('config'):
                     config = load_config(config_file=values.get('config'), base=saved['config'], **overrides)
+            if not resume and config.plan_durations:
+                with exclusive(config):
+                    prefetch_durations(config, urls, args.rate or config.rate)
             if args.background:
                 state = start_background(config, urls, resume)
                 emit(state)

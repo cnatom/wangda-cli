@@ -26,6 +26,7 @@ class Config:
     watch_interval: float = 1800
     watch_max_passes: int = 6
     session_wait_seconds: float = 21600
+    plan_durations: bool = True
 
     def as_dict(self):
         return {k: str(v) if isinstance(v, Path) else v for k, v in asdict(self).items()}

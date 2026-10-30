@@ -38,13 +38,15 @@ https://wangda.chinamobile.com/#/study/course/detail/subject-course/EXAMPLE_COUR
 
 ，且平台用的是 implicit 授权、**没有 refresh_token**，无法静默续期。watch 模式在 token 过期时不会判失败：它会把状态置为 `waiting_login`（`reason=session_expired_waiting_for_auth`）并原地等待，你在任意时刻重跑一次 `wanda auth` 写入新 token，队列随后自动继续，不需要重新排队或重启。等待上限由 `session_wait_seconds`（默认 6 小时）控制。
 
+`wanda run` 默认在播放前**逐门读取课程页上的「课程总时长」**（`plan_durations`，默认开），结果写入 `<data-dir>/durations.json` 并按课程 id 永久缓存——课程时长不会变，所以不做过期。预取只针对本次真的要播的课程：专题链接先展开成课程列表，已完成/选修的跳过；读不到的记 null，ETA 用实测节奏兜底，不会卡住整批。`--no-plan-durations` 关掉预取，`--refresh-durations` 忽略缓存重读。预取要独占 profile，因此队列在跑时不会做第二次。
+
 `wanda plan '<链接…>' --rate 1.5 --json` 只读地打开每门课程页，取页面上的「课程总时长」，给出每门课的分钟数、总时长和按倍速折算的实际耗时，用来在开跑前知道要花多久。它和 `inspect` 一样独占 profile：队列在跑时会被拒绝，因为平台只允许同一账号同一时刻打开一个课程页。
 
 `certificate` 只点击平台已经显示的「领取证书」，领取后刷新页面确认服务端状态。`already_claimed` 表示此前已领取；`not_eligible` 表示条件未满足；`no_certificate` 表示该专题没有证书入口，三者都不会被绕过。`--download DIR` 会在领取后打开证书弹窗并把 PNG 保存到指定目录；默认不下载。刚完成手动登录时加 `--headed` 可复用当前可见窗口。证书含姓名和证书编号，只保存在本地，不要上传或粘贴到聊天、日志和 issue。
 
 `status` 自带 `progress` 汇总，一条命令就能回答「刷到哪了」：`completed` / `total` / `percent`、各状态计数（`pending`、`running`、`unconfirmed`、`failed`）、`current`（正在播的课程 id、`position` / `duration`、`rate`、`sections` 小节计数器）、`eta`（剩余时间估算）、`pass`（watch 第几轮）与 `session_note`（如 `declared_expired_but_accepted`）。
 
-`eta` 的算法：把本次 run 里每门课 `course_start → course_done` 的实测耗时取平均，加上当前课程剩余时长（`(duration - position) / rate`），再乘以待跑门数，所以它是「按这台机器、这个账号当前的真实节奏」推出来的，不是理论值；没有历史样本时退化为只算当前课程剩余，并标 `basis: current_course_only`。`unconfirmed` 项不计入 ETA，它们要等 watch 下一轮重试。
+`eta` 的算法：已记录确切时长的课程按 `时长 / rate` 算，没记录的按本次 run 实测均值兜底，再加上当前课程剩余；`basis` 会标 `measured_durations` / `measured_plus_pace` / `observed_pace` / `current_course_only`。原文：把本次 run 里每门课 `course_start → course_done` 的实测耗时取平均，加上当前课程剩余时长（`(duration - position) / rate`），再乘以待跑门数，所以它是「按这台机器、这个账号当前的真实节奏」推出来的，不是理论值；没有历史样本时退化为只算当前课程剩余，并标 `basis: current_course_only`。`unconfirmed` 项不计入 ETA，它们要等 watch 下一轮重试。
 
 后台启动返回启动确认，最终结果以 `status` 为准；不加 `--background` 则前台运行。查询状态和日志不会打开或导航浏览器。运行期间不要执行 `inspect` 或 `certificate`。
 

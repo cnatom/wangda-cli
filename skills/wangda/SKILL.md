@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires wangda-cli, Python 3.11+, Chrome/Chromium, local shell access, and an authorized Wangda account. The default `wanda login` needs a graphical session; `wanda auth` needs none.
 metadata:
   author: cnatom
-  version: "0.7.5"
+  version: "0.8.0"
 ---
 
 # Wangda real playback
@@ -102,7 +102,7 @@ The URL above is a placeholder, not a real course. Use the user's exact valid UR
 4. Report `claimed` or `already_claimed` as platform-confirmed. `not_eligible` means the certificate conditions are not met and `no_certificate` means the page offers no certificate; do not retry, bypass, or fabricate either outcome.
 5. Download only when the user asks. `--download '<directory>'` saves the platform-generated PNG locally. Certificates contain the learner's name and certificate number: never upload, screenshot into chat, or paste their contents.
 
-- `wanda status` already answers "how far along is it" in one command: `progress.completed` / `total` / `percent`, per-status counts, `progress.current` (course id, `position` / `duration`, `rate`, `sections` counter), `pass`, `session_note`, and `eta` (estimated remaining wall-clock time from this run's own observed course pace plus the current course's remaining position; `basis` says whether it had history). `eta` excludes `unconfirmed` entries — they wait for the next watch pass. For exact totals instead of a pace estimate, `wanda plan '<urls>' --rate 1.5` opens each course page read-only and returns its own 「课程总时长」; it takes the same exclusive lock as `inspect`, so it is refused while a queue plays (the platform allows one course page per account at a time). Read those fields instead of re-deriving counts with ad-hoc scripts or scraping the event log.
+- `wanda status` already answers "how far along is it" in one command: `progress.completed` / `total` / `percent`, per-status counts, `progress.current` (course id, `position` / `duration`, `rate`, `sections` counter), `pass`, `session_note`, and `eta` (estimated remaining wall-clock time from this run's own observed course pace plus the current course's remaining position; `basis` says whether it had history). `eta` excludes `unconfirmed` entries — they wait for the next watch pass. `run` prefetches every course's own 「课程总时长」 before playback by default (`plan_durations`, `--no-plan-durations` to skip, `--refresh-durations` to ignore the cache), storing it in `<data-dir>/durations.json` keyed by course id with no expiry — course lengths do not change. Only courses this run will actually play are fetched (subject URLs are expanded first, completed/optional skipped); unreadable pages are recorded as unknown and the ETA falls back to the observed pace. Prefetching needs the profile exclusively, so it never runs while a queue plays. `wanda plan '<urls>' --rate 1.5` does the same read-only pass on demand; it takes the same exclusive lock as `inspect`, so it is refused while a queue plays (the platform allows one course page per account at a time). Read those fields instead of re-deriving counts with ad-hoc scripts or scraping the event log.
 
 ## Boundaries and pitfalls
 
