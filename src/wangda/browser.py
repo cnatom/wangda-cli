@@ -1,4 +1,5 @@
 """Dedicated Chromium processes and CDP; never attach to a user's normal profile."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ FEATURES = ','.join([
     'CalculateNativeWinOcclusion', 'TabFreeze', 'ProactiveTabFreezeAndDiscard',
     'MediaSessionService', 'HardwareMediaKeyHandling', 'MediaRouter',
 ])
+TOKEN_MARKER = b'"access_token"'
 
 
 def discover_browser(explicit=None):
@@ -206,15 +208,29 @@ class Browser:
         args += [url]
         return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def storage_mtime(self):
-        """Newest mtime under the profile's Local Storage: the app writing a token moves it."""
-        newest = 0.0
-        for path in self.config.profile.glob('*/Local Storage/leveldb/*'):
+    def token_signature(self):
+        """Fingerprint of the token records in the profile's Local Storage.
+
+        Local Storage is a leveldb directory that every page load writes to (`isFirstLoginVirsual`,
+        `popupTurn`, …), so a file mtime says nothing about a login. Only records carrying the
+        app's `access_token` value matter; their digest changes when the web app writes a token,
+        and stays put for unrelated traffic.
+        """
+        digest = hashlib.sha256()
+        found = False
+        for path in sorted(self.config.profile.glob('*/Local Storage/leveldb/*')):
+            if path.suffix not in ('.log', '.ldb') or not path.name[:1].isdigit():
+                continue
             try:
-                newest = max(newest, path.stat().st_mtime)
+                data = path.read_bytes()
             except OSError:
-                pass
-        return newest
+                continue
+            start = 0
+            while (index := data.find(TOKEN_MARKER, start)) != -1:
+                digest.update(data[max(0, index - 64):index + 512])
+                found = True
+                start = index + 1
+        return digest.digest() if found else b''
 
     def page(self):
         tabs = [t for t in self.http_json('/json/list') if t.get('type') == 'page']

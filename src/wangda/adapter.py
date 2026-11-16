@@ -88,13 +88,14 @@ def browser_login(config, timeout=600, poll=1.0, settle=3.0):
     inherit the opener's origin) while the app itself is still on the login wall.
     """
     browser = Browser(config)
-    marker = browser.storage_mtime()
+    marker = browser.token_signature()
     proc = browser.launch_plain(engine.HOST + '/', headed=True)
     deadline = time.monotonic() + timeout
     # Chrome keeps a process alive after its last window closes, so "the window is gone" cannot be
     # detected from the process alone: the app writing its token into Local Storage also ends the
-    # wait, and the leftover process is closed by the attach step below.
-    while proc.poll() is None and browser.storage_mtime() <= marker:
+    # wait, and the leftover process is closed by the attach step below. Unrelated Local Storage
+    # writes happen on every page load, so only a changed token record counts.
+    while proc.poll() is None and browser.token_signature() == marker:
         if time.monotonic() >= deadline:
             proc.terminate()
             raise LoginRequired('Login did not complete in time; log in, close the window, and retry')
