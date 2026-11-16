@@ -13,6 +13,7 @@ import pytest
 
 from wangda import adapter, auth, engine
 from wangda.adapter import LoginRequired, browser_login
+from wangda.browser import Browser
 from wangda.config import load_config
 
 SIGNED_IN_HREF = 'https://wangda.chinamobile.com/#/home'
@@ -65,10 +66,11 @@ class FakeBrowser:
     page_obj = None
     attached_headed = None
     proc = None
-    storage = [0.0]
+    signatures = [b'']
 
-    def storage_mtime(self):
-        return FakeBrowser.storage.pop(0) if len(FakeBrowser.storage) > 1 else FakeBrowser.storage[0]
+    def token_signature(self):
+        signatures = FakeBrowser.signatures
+        return signatures.pop(0) if len(signatures) > 1 else signatures[0]
 
     def __init__(self, config):
         pass
@@ -87,11 +89,11 @@ class FakeBrowser:
         pass
 
 
-def login(tmp_path, page, timeout=5, proc=None, storage=None):
+def login(tmp_path, page, timeout=5, proc=None, signatures=None):
     FakeBrowser.page_obj = page
     FakeBrowser.attached_headed = None
     FakeBrowser.proc = proc
-    FakeBrowser.storage = storage or [0.0]
+    FakeBrowser.signatures = signatures or [b'']
     with patch.object(adapter, 'Browser', FakeBrowser), \
             patch.object(adapter.time, 'sleep', lambda seconds: None), \
             patch.object(adapter.time, 'monotonic', side_effect=itertools.count()):
@@ -135,11 +137,11 @@ def test_window_left_open_times_out_and_is_terminated(tmp_path):
     assert not (tmp_path / auth.SESSION_FILE).exists()
 
 
-def test_token_written_to_local_storage_ends_the_wait_even_if_chrome_stays_alive(tmp_path):
-    """Chrome 关窗后进程仍在：Local Storage 被写入同样说明登录已完成。"""
+def test_token_record_written_to_local_storage_ends_the_wait_even_if_chrome_stays_alive(tmp_path):
+    """Chrome 关窗后进程仍在：网大写入了新的 token 记录同样说明登录已完成。"""
     proc = FakeProc(open_polls=10**9)
     page = FakePage({'access_token': 'abc123'})
-    session = login(tmp_path, page, proc=proc, storage=[1.0, 2.0])
+    session = login(tmp_path, page, proc=proc, signatures=[b'', b'token-123'])
     assert session['access_token'] == 'abc123'
     assert proc.terminated is True                      # 接管前先收掉残留进程
     assert FakeBrowser.attached_headed is False
@@ -163,3 +165,43 @@ def test_signed_in_rejects_a_page_that_is_not_on_the_platform_host():
 def test_read_token_js_matches_the_web_app_storage():
     assert "localStorage.getItem('token')" in engine.READ_TOKEN
     assert 'access_token' in engine.READ_TOKEN
+
+
+def leveldb_path(tmp_path):
+    """Create the Local Storage leveldb the dedicated profile would hold."""
+    directory = tmp_path / 'profile' / 'Default' / 'Local Storage' / 'leveldb'
+    directory.mkdir(parents=True)
+    return directory
+
+
+def test_token_signature_ignores_unrelated_local_storage_writes(tmp_path):
+    """页面一加载就会写 localStorage；这些记录不是 token，不能当成登录完成。"""
+    leveldb = leveldb_path(tmp_path)
+    record = leveldb / '000007.log'
+    record.write_bytes(b'#METAhttps://wangda.chinamobile.comisFirstLoginVirsualtrue')
+    browser = Browser(load_config(data_dir=tmp_path, profile=tmp_path / 'profile', env={}))
+    assert browser.token_signature() == b''
+    record.write_bytes(b'#METAhttps://wangda.chinamobile.compopupTurn{"show":false}')
+    assert browser.token_signature() == b''            # 噪声写入不改变签名
+    assert browser.token_signature() == b''
+
+
+def test_token_signature_tracks_a_written_token_record(tmp_path):
+    leveldb = leveldb_path(tmp_path)
+    record = leveldb / '000007.log'
+    browser = Browser(load_config(data_dir=tmp_path, profile=tmp_path / 'profile', env={}))
+    before = browser.token_signature()
+    record.write_bytes(b'\x00\x01tokene\x01{"access_token": "abc", "token_type": "Bearer"}')
+    after = browser.token_signature()
+    assert len(after) == 32
+    assert after != before
+    assert browser.token_signature() == after          # 同一条记录保持稳定
+
+
+def test_a_stale_token_does_not_end_the_wait_before_the_window_closes(tmp_path):
+    """profile 里原本就有过期 token：页面噪声写入不能提前收掉登录窗口。"""
+    proc = FakeProc(open_polls=3)
+    page = FakePage({'access_token': 'old-token'})
+    session = login(tmp_path, page, proc=proc, signatures=[b'stale', b'stale', b'stale'])
+    assert session['access_token'] == 'old-token'
+    assert proc.terminated is False                    # 窗口是自己关掉的，不是被杀掉的
